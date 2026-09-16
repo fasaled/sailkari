@@ -186,7 +186,6 @@ export function App(): React.ReactElement {
           <Text bold color="cyan">SAILKARI</Text>
           <Text dimColor>activity {activityScroll > 0 ? `(page ${Math.ceil(activityScroll / activityLines)})` : "(latest)"}</Text>
         </Box>
-        <Text dimColor>────────────────────────────────────────────────────────</Text>
         {events.slice(firstVisibleEvent, lastVisibleEvent).map((event, index) => (
           <Text key={`${firstVisibleEvent + index}-${event.text}`} color={event.tone === "error" ? "red" : event.tone === "success" ? "green" : event.tone === "muted" ? "gray" : undefined}>
             {event.tone === "error" ? "! " : event.tone === "success" ? "✓ " : "  "}{event.text}
