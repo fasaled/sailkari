@@ -18,18 +18,16 @@ platform. npm selects the appropriate prebuilt package for macOS, Linux, or Wind
 the current architecture. Sailkari disables source-build fallback: no compiler is required,
 and an unsupported platform fails explicitly instead of downloading source code at runtime.
 
-File classification works anywhere the native addon runs. Writing and listing Sailkari's
-extended-attribute tags currently requires the macOS `xattr` command.
+File classification works anywhere the native addon runs. Results are stored portably in
+`.sailkari/results.json` inside each classified folder, so the same workflow works on macOS,
+Linux, and Windows.
 
 ## Install and run
 
-Run without a global installation:
+Run the full-screen terminal interface without a global installation:
 
 ```bash
-npx sailkari classify \
-  --folder ./documents \
-  --labels ./labels.yaml \
-  --model ./models/model.gguf
+npx sailkari
 ```
 
 Or install globally:
@@ -46,31 +44,27 @@ git clone https://github.com/fasaled/local-ai-classifier.git
 cd local-ai-classifier
 npm install
 npm run build
-node dist/index.js help
+node dist/index.js
 ```
 
-## Usage
+## TUI Commands
+
+Enter these commands in the lower input panel:
 
 ```text
-sailkari classify --folder <path> --labels <yaml> --model <gguf> [options]
+model <path.gguf>                  Load and persist the inference model
+prompt <path|default>              Configure the system prompt
+classify <folder> <labels.yaml>   Classify a folder
+classify <folder> <labels.yaml> --force
+list-tags <folder>                 List stored classifications
+remove-tags <folder>               Remove stored classifications
+help                               Show command help
+quit                               Exit Sailkari
 ```
 
-| Option | Description |
-|---|---|
-| `--folder`, `-f` | Folder to process (required) |
-| `--labels`, `-l` | YAML label file (required) |
-| `--model`, `-m` | Path to an external GGUF model (required) |
-| `--system-prompt`, `-s` | Optional system prompt file |
-| `--force` | Reclassify files that already have Sailkari's marker |
-| `--watch`, `-w` | Keep the model loaded and classify changed top-level files |
-| `--help`, `-h` | Show command help |
-
-Other commands:
-
-```bash
-sailkari list-tags ./documents
-sailkari remove-tags ./documents
-```
+The upper panel keeps results and configuration events in arrival order. The model and
+system prompt configuration is saved in `~/.config/sailkari/config.json`. Use Tab for
+command and path completion.
 
 ## Labels
 
@@ -86,8 +80,8 @@ See `examples/labels.yaml` for a larger example.
 
 ## System prompts
 
-Omit `--system-prompt` to use the built-in classifier prompt. To compare prompt variants,
-copy `examples/system-prompt.txt`, edit it, and pass its path.
+Use `prompt default` to use the built-in classifier prompt. To use a custom prompt, run
+`prompt examples/system-prompt.txt`.
 
 The parser accepts:
 
@@ -100,21 +94,22 @@ output is treated as no match.
 ## Lifecycle and privacy
 
 Each completion gets a fresh llama.cpp context. The context is disposed immediately after
-generation; the model remains loaded only for the duration of the command (or while
-`--watch` is active) and is then disposed explicitly. Repeated classifications therefore do
+generation; the model remains loaded for the TUI session and is disposed explicitly when
+the application exits. Repeated classifications therefore do
 not retain conversation state or leak contexts.
 
 The execution flow is:
 
 ```text
-load native addon and GGUF
+start the TUI
+  → load native addon and GGUF with `model`
   → scan files
-  → skip files already marked
+  → skip files already stored in `.sailkari/results.json`
   → create context
   → generate one classification in-process
   → dispose context
   → parse and write the label
-  → dispose model and native runtime
+  → dispose model and native runtime on exit
 ```
 
 No model or document data is sent over the network. npm may use the network during
@@ -127,7 +122,7 @@ normal runtime dependency and provides platform packages such as
 `@node-llama-cpp/mac-arm64-metal`, `@node-llama-cpp/linux-x64`, and
 `@node-llama-cpp/win-x64`. npm installs only compatible optional dependencies.
 
-GGUF files are excluded from the package and must be supplied via `--model`.
+GGUF files are excluded from the package and must be supplied with the `model` command.
 
 ## Development
 
@@ -151,6 +146,5 @@ skipped.
 
 - Plain text formats only: `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.xml`, `.log`,
   `.conf`, `.config`, `.ini`, `.toml`, and `.properties`.
-- Extended-attribute tagging currently targets macOS.
-- `--watch` watches only the top-level folder.
+- Results are stored per classified folder in `.sailkari/results.json`.
 - Models are not downloaded automatically.

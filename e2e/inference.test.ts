@@ -3,8 +3,8 @@ import { access, copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadLabels, processFile } from "../src/classifier.js";
+import { ClassificationStore } from "../src/classification-store.js";
 import { LLMEngine } from "../src/llm-engine.js";
-import { getOwnLabels, hasAIClassifiedTag, removeOwnTags } from "../src/xattr.js";
 
 /**
  * Real in-process llama.cpp inference. Skipped when a GGUF is missing
@@ -52,6 +52,7 @@ describe.skipIf(!enabled)("e2e inference", () => {
   let workDir: string;
   let labels: Awaited<ReturnType<typeof loadLabels>>;
   let engine: LLMEngine;
+  let store: ClassificationStore;
 
   beforeAll(async () => {
     labels = await loadLabels("examples/labels.yaml");
@@ -62,6 +63,7 @@ describe.skipIf(!enabled)("e2e inference", () => {
       const dest = join(workDir, file);
       await copyFile(src, dest);
     }
+    store = new ClassificationStore(workDir);
     engine = new LLMEngine();
     await engine.loadModel(modelPath!);
   }, 240_000);
@@ -76,12 +78,12 @@ describe.skipIf(!enabled)("e2e inference", () => {
       `${file} → ${label}`,
       async () => {
         const path = join(workDir, file);
-        removeOwnTags(path);
-        const result = await processFile(path, labels, true, engine);
+        store.remove(path);
+        const result = await processFile(path, labels, true, engine, store);
         expect(result.status).toBe("ok");
         expect(result.labels).toEqual([label]);
-        expect(hasAIClassifiedTag(path)).toBe(true);
-        expect(getOwnLabels(path)).toEqual([label]);
+        expect(store.has(path)).toBe(true);
+        expect(store.getLabels(path)).toEqual([label]);
       },
       120_000
     );
@@ -89,14 +91,14 @@ describe.skipIf(!enabled)("e2e inference", () => {
 
   test("skips a file that already has the marker", async () => {
     const path = join(workDir, "bank-statement.txt");
-    expect(hasAIClassifiedTag(path)).toBe(true);
-    const result = await processFile(path, labels, false, engine);
+    expect(store.has(path)).toBe(true);
+    const result = await processFile(path, labels, false, engine, store);
     expect(result.status).toBe("skip");
   });
 
   test("--force reclassifies and keeps a valid label", async () => {
     const path = join(workDir, "bank-statement.txt");
-    const result = await processFile(path, labels, true, engine);
+    const result = await processFile(path, labels, true, engine, store);
     expect(result.status).toBe("ok");
     expect(result.labels).toEqual(["banking"]);
   }, 120_000);

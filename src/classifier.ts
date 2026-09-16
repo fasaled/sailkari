@@ -3,12 +3,7 @@ import { parse } from "yaml";
 import type { LLMEngine } from "./llm-engine.js";
 import type { Label, ProcessingResult, LabelsFile } from "./types.js";
 import { extractFileInfo } from "./metadata.js";
-import {
-  hasAIClassifiedTag,
-  getOwnLabels,
-  writeOwnTags,
-  removeOwnSemanticTags,
-} from "./xattr.js";
+import type { ClassificationStore } from "./classification-store.js";
 import { determineStrategy } from "./context.js";
 import { startProgress, updateProgress } from "./progress.js";
 
@@ -17,9 +12,10 @@ export async function processFile(
   labels: Label[],
   force: boolean,
   engine: LLMEngine,
+  store: ClassificationStore,
   systemPrompt?: string
 ): Promise<ProcessingResult> {
-  const hasAIClassified = hasAIClassifiedTag(filePath);
+  const hasAIClassified = store.has(filePath);
 
   if (hasAIClassified && !force) {
     return {
@@ -30,7 +26,7 @@ export async function processFile(
   }
 
   const filename = filePath.split("/").pop() || filePath;
-  const fileInfo = extractFileInfo(filePath);
+  const fileInfo = extractFileInfo(filePath, store);
   let content: string;
   try {
     content = await readFile(filePath, "utf8");
@@ -66,8 +62,7 @@ export async function processFile(
 
   if (!result || result.labels.length === 0) {
     if (force && hasAIClassified) {
-      removeOwnSemanticTags(filePath);
-      writeOwnTags(filePath, []);
+      store.setLabels(filePath, []);
     }
     return {
       status: "none",
@@ -76,10 +71,10 @@ export async function processFile(
   }
 
   if (force && hasAIClassified) {
-    removeOwnSemanticTags(filePath);
+    store.remove(filePath);
   }
 
-  writeOwnTags(filePath, result.labels);
+  store.setLabels(filePath, result.labels);
 
   return {
     status: "ok",

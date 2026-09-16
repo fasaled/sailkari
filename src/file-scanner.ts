@@ -1,5 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { isClassificationStorePath } from "./classification-store.js";
 
 const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".xml",
@@ -20,6 +21,9 @@ export function scanFolder(folderPath: string): string[] {
   try {
     for (const entry of readdirSync(folderPath, { withFileTypes: true })) {
       const path = join(folderPath, entry.name);
+      if (entry.name === ".sailkari" || isClassificationStorePath(path)) {
+        continue;
+      }
       if (entry.isDirectory()) {
         files.push(...scanFolder(path));
       } else if (entry.isFile() && isTextFile(path)) {

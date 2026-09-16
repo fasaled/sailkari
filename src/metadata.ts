@@ -2,13 +2,13 @@ import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import type { FileInfo, FileMetadata } from "./types.js";
-import { getAllTags } from "./xattr.js";
+import type { ClassificationStore } from "./classification-store.js";
 
-export function extractFileInfo(filePath: string): FileInfo {
+export function extractFileInfo(filePath: string, store?: ClassificationStore): FileInfo {
   const stats = statSync(filePath);
   const name = basename(filePath);
   const extension = extname(name).toLowerCase();
-  const existingTags = getAllTags(filePath);
+  const existingTags = store?.getTags(filePath) ?? [];
 
   return {
     path: filePath,
@@ -21,9 +21,13 @@ export function extractFileInfo(filePath: string): FileInfo {
   };
 }
 
-export async function extractMetadata(filePath: string, tokenCount: number): Promise<FileMetadata> {
+export async function extractMetadata(
+  filePath: string,
+  tokenCount: number,
+  store?: ClassificationStore
+): Promise<FileMetadata> {
   const content = await readFile(filePath, "utf8");
-  const info = extractFileInfo(filePath);
+  const info = extractFileInfo(filePath, store);
 
   return {
     info,
