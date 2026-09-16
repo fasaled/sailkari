@@ -1,11 +1,13 @@
-import { scanFolder } from "./file-scanner.ts";
-import { loadLabels, processFile } from "./classifier.ts";
-import { logProgress, logSummary } from "./logger.ts";
-import { startServer, stopServer } from "./llm.ts";
-import { getAllTags, removeOwnTags, hasAIClassifiedTag } from "./xattr.ts";
-import { watchFolder } from "./watcher.ts";
-import { inspectSystemPrompt, loadSystemPrompt } from "./prompt.ts";
-import type { ProcessingSummary } from "./types.ts";
+#!/usr/bin/env node
+
+import { scanFolder } from "./file-scanner.js";
+import { loadLabels, processFile } from "./classifier.js";
+import { logProgress, logSummary } from "./logger.js";
+import { LLMEngine } from "./llm-engine.js";
+import { getAllTags, removeOwnTags, hasAIClassifiedTag } from "./xattr.js";
+import { watchFolder } from "./watcher.js";
+import { inspectSystemPrompt, loadSystemPrompt } from "./prompt.js";
+import type { ProcessingSummary } from "./types.js";
 
 interface GlobalFlags {
   help: boolean;
@@ -43,7 +45,7 @@ Commands:
     --model, -m         Path to the GGUF model file (required)
     --system-prompt, -s Optional system prompt file (compare prompts / models)
     --force             Reprocess files already classified
-    --watch, -w         Keep server running and auto-classify new files
+    --watch, -w         Keep the model loaded and auto-classify new files
     --help, -h          Show help for this command
 
   list-tags <path>      List tags for all files in a folder
@@ -73,7 +75,7 @@ Examples:
 
 function printClassifyHelp(): void {
   console.log(`
-classify - Classify files in a folder (starts server, classifies, stops)
+classify - Classify files in a folder with the local in-process model
 
 Usage:
   sailkari classify --folder <path> --labels <yaml> --model <path>
@@ -102,7 +104,7 @@ function parseGlobalFlags(args: string[]): { flags: GlobalFlags; remaining: stri
   let i = 0;
 
   while (i < args.length) {
-    const arg = args[i];
+    const arg = args[i]!;
     if (arg === "--help" || arg === "-h") {
       flags.help = true;
       i++;
@@ -121,7 +123,7 @@ function parseCommand(args: string[]): Command | null {
     return null;
   }
 
-  const subcommand = args[0];
+  const subcommand = args[0]!;
 
   switch (subcommand) {
     case "help":
@@ -144,9 +146,9 @@ function parseCommand(args: string[]): Command | null {
       return {
         cmd: "classify",
         args: {
-          folder: folderFlagIdx !== -1 ? remaining[folderFlagIdx + 1] : nonFlagArgs[0] || "",
-          labels: labelsFlagIdx !== -1 ? remaining[labelsFlagIdx + 1] : "",
-          model: modelFlagIdx !== -1 ? remaining[modelFlagIdx + 1] : nonFlagArgs[1] || "",
+          folder: folderFlagIdx !== -1 ? remaining[folderFlagIdx + 1] ?? "" : nonFlagArgs[0] || "",
+          labels: labelsFlagIdx !== -1 ? remaining[labelsFlagIdx + 1] ?? "" : "",
+          model: modelFlagIdx !== -1 ? remaining[modelFlagIdx + 1] ?? "" : nonFlagArgs[1] || "",
           systemPrompt: systemPromptFlagIdx !== -1 ? remaining[systemPromptFlagIdx + 1] || "" : "",
           force: remaining.includes("--force"),
           watch: remaining.includes("--watch") || remaining.includes("-w"),
@@ -168,6 +170,7 @@ function parseCommand(args: string[]): Command | null {
     default:
       console.error(`Unknown command: ${subcommand}`);
       printHelp();
+      process.exitCode = 1;
       return null;
   }
 }
@@ -186,9 +189,11 @@ async function handleCommand(cmd: Command): Promise<void> {
         process.exit(1);
       }
 
+      const engine = new LLMEngine();
+      try {
       const modelLoadStart = Date.now();
       console.log("Loading model (this may take a minute)...\n");
-      await startServer(cmd.args.model);
+      await engine.loadModel(cmd.args.model);
       const modelLoadTime = Date.now() - modelLoadStart;
 
       let systemPrompt: string | undefined;
@@ -220,7 +225,7 @@ async function handleCommand(cmd: Command): Promise<void> {
       };
 
       for (const filePath of files) {
-        const result = await processFile(filePath, labels, cmd.args.force, systemPrompt);
+        const result = await processFile(filePath, labels, cmd.args.force, engine, systemPrompt);
         logProgress(result, startTime, labels);
 
         if (result.status === "ok") {
@@ -245,7 +250,7 @@ async function handleCommand(cmd: Command): Promise<void> {
           debounceMs: 750,
           signal: ac.signal,
           onFile: async (filePath) => {
-            const r = await processFile(filePath, labels, cmd.args.force, systemPrompt);
+            const r = await processFile(filePath, labels, cmd.args.force, engine, systemPrompt);
             logProgress(r, new Date(), labels);
           },
         });
@@ -256,7 +261,7 @@ async function handleCommand(cmd: Command): Promise<void> {
           console.log("\nStopping watcher...");
           ac.abort();
           try { watcher.close(); } catch {}
-          await stopServer();
+          await engine.dispose();
           process.exit(0);
         };
         process.on("SIGINT", shutdown);
@@ -264,7 +269,10 @@ async function handleCommand(cmd: Command): Promise<void> {
 
         await new Promise(() => {});
       } else {
-        await stopServer();
+        // The model is released by the finally block.
+      }
+      } finally {
+        await engine.dispose();
       }
       break;
     }

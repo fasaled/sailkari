@@ -1,25 +1,35 @@
 {
-  "name": "local-ai-classifier",
-  "module": "src/index.ts",
+  "name": "sailkari",
+  "version": "0.1.0",
   "type": "module",
-  "private": true,
   "license": "MIT",
-  "description": "PoC harness for trying local GGUF models and system prompts on offline text classification (macOS)",
+  "description": "Classify local text files with GGUF models using in-process llama.cpp inference",
+  "bin": {
+    "sailkari": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
-    "prebuild": "bun run scripts/download-llama.ts",
-    "build": "bun build --compile --target bun --outfile sailkari src/index.ts",
-    "dist": "mkdir -p sailkari-dist && cp sailkari sailkari-dist/ && cp -a bin sailkari-dist/",
-    "start": "bun run src/index.ts",
-    "test": "bun test src",
-    "test:e2e": "bun test e2e"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "build": "tsc -p tsconfig.build.json",
+    "start": "npm run build && node dist/index.js",
+    "test": "vitest run src",
+    "test:e2e": "vitest run e2e",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
   },
   "dependencies": {
+    "node-llama-cpp": "3.21.1",
     "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
   }
 }

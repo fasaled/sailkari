@@ -1,5 +1,5 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test";
-import { startProgress, updateProgress, finishProgress, clearProgress } from "./progress.ts";
+import { test, expect, describe, afterEach, beforeEach } from "vitest";
+import { startProgress, updateProgress, finishProgress, clearProgress } from "./progress.js";
 
 describe("progress bar", () => {
   let originalWrite: typeof process.stdout.write;
@@ -49,7 +49,7 @@ describe("progress bar", () => {
     const beforeLen = before.length;
     updateProgress("test.txt", 1, 1, "done");
     const after = getOutput().slice(beforeLen);
-    expect(after).toStartWith("\r");
+    expect(after.startsWith("\r")).toBe(true);
     expect(after).toContain("done");
     expect(after).toMatch(/done\s+$/);
   });

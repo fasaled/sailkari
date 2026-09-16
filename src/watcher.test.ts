@@ -1,5 +1,5 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test";
-import { watchFolder } from "./watcher.ts";
+import { test, expect, describe, afterEach, beforeEach } from "vitest";
+import { watchFolder } from "./watcher.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -123,7 +123,7 @@ describe("watcher duplicate handling", () => {
 
     expect(events.length).toBe(3);
     for (let i = 1; i < events.length; i++) {
-      expect(events[i].t).toBeGreaterThanOrEqual(events[i - 1].t);
+      expect(events[i]!.t).toBeGreaterThanOrEqual(events[i - 1]!.t);
     }
   });
 });

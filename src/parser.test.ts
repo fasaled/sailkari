@@ -1,6 +1,6 @@
-import { test, expect, describe } from "bun:test";
-import { parseResponse, selectLabelByMajority } from "./parser.ts";
-import type { Label } from "./types.ts";
+import { test, expect, describe } from "vitest";
+import { parseResponse, selectLabelByMajority } from "./parser.js";
+import type { Label } from "./types.js";
 
 const labels: Label[] = [
   { name: "family", description: "family docs" },

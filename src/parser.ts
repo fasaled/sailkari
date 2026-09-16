@@ -1,4 +1,4 @@
-import { ClassificationResult, Label } from "./types.ts";
+import type { ClassificationResult, Label } from "./types.js";
 
 export function parseResponse(response: string, validLabels?: Label[]): ClassificationResult | null {
   if (!response || !validLabels) {
@@ -70,12 +70,12 @@ function parseTextResult(text: string, validLabels: Label[]): ClassificationResu
     if (index !== -1) {
       let score = 10;
 
-      if (index === 0 || /[\s\n\t,;:]/.test(text[index - 1])) {
+      if (index === 0 || /[\s\n\t,;:]/.test(text[index - 1]!)) {
         score += 5;
       }
 
       const endIndex = index + label.name.length;
-      if (endIndex >= text.length || /[\s\n\t,;:.]/.test(text[endIndex])) {
+      if (endIndex >= text.length || /[\s\n\t,;:.]/.test(text[endIndex]!)) {
         score += 5;
       }
 
@@ -90,7 +90,7 @@ function parseTextResult(text: string, validLabels: Label[]): ClassificationResu
   scoredLabels.sort((a, b) => b.score - a.score);
 
   return {
-    labels: [scoredLabels[0].name],
+    labels: [scoredLabels[0]!.name],
   };
 }
 
@@ -101,5 +101,5 @@ export function selectLabelByMajority(labelCounts: Record<string, number>): stri
   }
 
   entries.sort((a, b) => b[1] - a[1]);
-  return entries[0][0];
+  return entries[0]![0];
 }

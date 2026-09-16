@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
-import { isTextFile } from "./file-scanner.ts";
+import { isTextFile } from "./file-scanner.js";
 
 export interface WatchOptions {
   folder: string;

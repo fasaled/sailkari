@@ -1,5 +1,6 @@
-import { Label, ClassificationResult } from "./types.ts";
-import { classify, classifyChunked, EFFECTIVE_LIMIT, type ProgressCallback } from "./llm.ts";
+import type { LLMEngine, ProgressCallback } from "./llm-engine.js";
+import { EFFECTIVE_LIMIT } from "./llm-engine.js";
+import type { Label, ClassificationResult } from "./types.js";
 
 export interface ContextStrategyResult {
   result: ClassificationResult | null;
@@ -18,19 +19,19 @@ export async function determineStrategy(
     existingTags: string[];
   },
   labels: Label[],
+  engine: LLMEngine,
   onProgress?: ProgressCallback,
   systemPrompt?: string
 ): Promise<ContextStrategyResult> {
   const tokenCount = Math.ceil(content.length / 4);
 
   if (tokenCount <= EFFECTIVE_LIMIT) {
-    const result = await classify(content, metadata, labels, onProgress, systemPrompt);
+    const result = await engine.classify(content, labels, onProgress, systemPrompt);
     return { result };
   }
 
-  const { result, chunks, calls } = await classifyChunked(
+  const { result, chunks, calls } = await engine.classifyChunked(
     content,
-    metadata,
     labels,
     onProgress,
     systemPrompt

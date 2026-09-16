@@ -1,5 +1,5 @@
-import { ProcessingResult } from "./types.ts";
-import { finishProgress } from "./progress.ts";
+import type { ProcessingResult } from "./types.js";
+import { finishProgress } from "./progress.js";
 
 export function formatTimestamp(startTime: Date): string {
   const now = new Date();

@@ -1,19 +1,22 @@
+import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
-import { Label, ProcessingResult, LabelsFile } from "./types.ts";
-import { extractFileInfo } from "./metadata.ts";
+import type { LLMEngine } from "./llm-engine.js";
+import type { Label, ProcessingResult, LabelsFile } from "./types.js";
+import { extractFileInfo } from "./metadata.js";
 import {
   hasAIClassifiedTag,
   getOwnLabels,
   writeOwnTags,
   removeOwnSemanticTags,
-} from "./xattr.ts";
-import { determineStrategy } from "./context.ts";
-import { startProgress, updateProgress } from "./progress.ts";
+} from "./xattr.js";
+import { determineStrategy } from "./context.js";
+import { startProgress, updateProgress } from "./progress.js";
 
 export async function processFile(
   filePath: string,
   labels: Label[],
   force: boolean,
+  engine: LLMEngine,
   systemPrompt?: string
 ): Promise<ProcessingResult> {
   const hasAIClassified = hasAIClassifiedTag(filePath);
@@ -30,7 +33,7 @@ export async function processFile(
   const fileInfo = extractFileInfo(filePath);
   let content: string;
   try {
-    content = await Bun.file(filePath).text();
+    content = await readFile(filePath, "utf8");
   } catch {
     return {
       status: "skip",
@@ -56,6 +59,7 @@ export async function processFile(
       existingTags: fileInfo.existingTags,
     },
     labels,
+    engine,
     onProgress,
     systemPrompt
   );
@@ -87,7 +91,7 @@ export async function processFile(
 }
 
 export async function loadLabels(labelsPath: string): Promise<Label[]> {
-  const content = await Bun.file(labelsPath).text();
+  const content = await readFile(labelsPath, "utf8");
   const parsed = parse(content) as LabelsFile;
   const labels: Label[] = [];
   for (const [name, description] of Object.entries(parsed)) {

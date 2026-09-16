@@ -1,11 +1,12 @@
-import { test, expect, describe } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { test, expect, describe } from "vitest";
 import {
   DEFAULT_SYSTEM_PROMPT,
   buildChatMessages,
   buildUserPayload,
   inspectSystemPrompt,
-} from "./prompt.ts";
-import type { Label } from "./types.ts";
+} from "./prompt.js";
+import type { Label } from "./types.js";
 
 const labels: Label[] = [
   { name: "banking", description: "financial documents" },
@@ -39,7 +40,7 @@ describe("inspectSystemPrompt", () => {
   });
 
   test("example file matches the built-in default", async () => {
-    const file = (await Bun.file("examples/system-prompt.txt").text()).trim();
+    const file = (await readFile("examples/system-prompt.txt", "utf8")).trim();
     expect(file).toBe(DEFAULT_SYSTEM_PROMPT.trim());
     expect(inspectSystemPrompt(file)).toEqual([]);
   });

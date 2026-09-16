@@ -1,4 +1,4 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
 # output
@@ -36,15 +36,3 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Local models (user-provided GGUF files)
 models/
 *.gguf
-
-# llama.cpp runtime (downloaded by scripts/download-llama.ts)
-bin/
-
-# Compiled binary
-classifier-dist
-classifier
-sailkari-dist
-sailkari
-
-# Classifier server info
-.classifier/

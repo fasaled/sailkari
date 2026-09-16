@@ -1,4 +1,5 @@
-import type { Label } from "./types.ts";
+import { readFile } from "node:fs/promises";
+import type { Label } from "./types.js";
 
 /**
  * The parser accepts:
@@ -73,7 +74,7 @@ export function inspectSystemPrompt(text: string): string[] {
 }
 
 export async function loadSystemPrompt(path: string): Promise<string> {
-  const text = (await Bun.file(path).text()).trim();
+  const text = (await readFile(path, "utf8")).trim();
   if (!text) {
     throw new Error(`System prompt file is empty: ${path}`);
   }

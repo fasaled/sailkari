@@ -1,18 +1,18 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { access, copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadLabels, processFile } from "../src/classifier.ts";
-import { startServer, stopServer } from "../src/llm.ts";
-import { getOwnLabels, hasAIClassifiedTag, removeOwnTags } from "../src/xattr.ts";
+import { loadLabels, processFile } from "../src/classifier.js";
+import { LLMEngine } from "../src/llm-engine.js";
+import { getOwnLabels, hasAIClassifiedTag, removeOwnTags } from "../src/xattr.js";
 
 /**
- * Real llama-server inference. Skipped when runtime or a GGUF is missing
+ * Real in-process llama.cpp inference. Skipped when a GGUF is missing
  * (CI, fresh clone). Does not write RESULTS.md or any other report file.
  *
- *   bun test e2e
- *   CLASSIFIER_MODEL=models/your-model.gguf bun test e2e
- *   CLASSIFIER_E2E=0 bun test   # skip even if a model is present
+ *   npm run test:e2e
+ *   CLASSIFIER_MODEL=models/your-model.gguf npm run test:e2e
+ *   CLASSIFIER_E2E=0 npm test   # skip even if a model is present
  */
 
 const FIXTURES: { file: string; label: string }[] = [
@@ -25,24 +25,33 @@ const FIXTURES: { file: string; label: string }[] = [
 
 async function resolveModel(): Promise<string | null> {
   const fromEnv = process.env.CLASSIFIER_MODEL;
-  if (fromEnv && (await Bun.file(fromEnv).exists())) return fromEnv;
-
-  const found: string[] = [];
-  for await (const file of new Bun.Glob("*.gguf").scan("models")) {
-    found.push(join("models", file));
+  if (fromEnv) {
+    try {
+      await access(fromEnv);
+      return fromEnv;
+    } catch {
+      return null;
+    }
   }
-  found.sort();
-  return found[0] ?? null;
+
+  try {
+    const found = (await readdir("models"))
+      .filter((file) => file.endsWith(".gguf"))
+      .sort()
+      .map((file) => join("models", file));
+    return found[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
-const llamaExists = await Bun.file("bin/llama-server").exists();
 const modelPath = await resolveModel();
-const enabled =
-  process.env.CLASSIFIER_E2E !== "0" && llamaExists && modelPath !== null;
+const enabled = process.env.CLASSIFIER_E2E !== "0" && modelPath !== null;
 
 describe.skipIf(!enabled)("e2e inference", () => {
   let workDir: string;
   let labels: Awaited<ReturnType<typeof loadLabels>>;
+  let engine: LLMEngine;
 
   beforeAll(async () => {
     labels = await loadLabels("examples/labels.yaml");
@@ -51,13 +60,14 @@ describe.skipIf(!enabled)("e2e inference", () => {
     for (const { file } of FIXTURES) {
       const src = join("examples/documents", file);
       const dest = join(workDir, file);
-      await Bun.write(dest, await Bun.file(src).text());
+      await copyFile(src, dest);
     }
-    await startServer(modelPath!);
+    engine = new LLMEngine();
+    await engine.loadModel(modelPath!);
   }, 240_000);
 
   afterAll(async () => {
-    await stopServer();
+    await engine?.dispose();
     if (workDir) await rm(workDir, { recursive: true, force: true });
   });
 
@@ -67,27 +77,27 @@ describe.skipIf(!enabled)("e2e inference", () => {
       async () => {
         const path = join(workDir, file);
         removeOwnTags(path);
-        const result = await processFile(path, labels, true);
+        const result = await processFile(path, labels, true, engine);
         expect(result.status).toBe("ok");
         expect(result.labels).toEqual([label]);
         expect(hasAIClassifiedTag(path)).toBe(true);
         expect(getOwnLabels(path)).toEqual([label]);
       },
-      { timeout: 120_000 }
+      120_000
     );
   }
 
   test("skips a file that already has the marker", async () => {
     const path = join(workDir, "bank-statement.txt");
     expect(hasAIClassifiedTag(path)).toBe(true);
-    const result = await processFile(path, labels, false);
+    const result = await processFile(path, labels, false, engine);
     expect(result.status).toBe("skip");
   });
 
   test("--force reclassifies and keeps a valid label", async () => {
     const path = join(workDir, "bank-statement.txt");
-    const result = await processFile(path, labels, true);
+    const result = await processFile(path, labels, true, engine);
     expect(result.status).toBe("ok");
     expect(result.labels).toEqual(["banking"]);
-  }, { timeout: 120_000 });
+  }, 120_000);
 });

@@ -1,4 +1,5 @@
-import { spawnSync } from "bun:child_process";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".xml",
@@ -15,16 +16,19 @@ export function isTextFile(filePath: string): boolean {
 
 export function scanFolder(folderPath: string): string[] {
   const files: string[] = [];
-  const result = spawnSync("find", [folderPath, "-type", "f"]);
-  if (result.status !== 0) {
-    throw new Error(`Cannot access folder: ${folderPath}`);
-  }
-  const output = new TextDecoder().decode(result.stdout);
-  const lines = output.split("\n").filter(Boolean);
-  for (const line of lines) {
-    if (isTextFile(line)) {
-      files.push(line);
+
+  try {
+    for (const entry of readdirSync(folderPath, { withFileTypes: true })) {
+      const path = join(folderPath, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...scanFolder(path));
+      } else if (entry.isFile() && isTextFile(path)) {
+        files.push(path);
+      }
     }
+  } catch (error) {
+    throw new Error(`Cannot access folder: ${folderPath}`, { cause: error });
   }
+
   return files;
 }

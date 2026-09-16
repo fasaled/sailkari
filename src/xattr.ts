@@ -1,4 +1,4 @@
-import { spawnSync } from "bun:child_process";
+import { spawnSync } from "node:child_process";
 
 const AI_CLASSIFIED_TAG = "ai-classified";
 const AI_CLASSIFIED_LABELS_TAG = "ai-classified-labels";
