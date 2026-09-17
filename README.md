@@ -18,24 +18,72 @@ The npm package includes the compatible llama.cpp native addon and libraries for
 platform. npm picks the matching prebuilt package for your OS and architecture, so no
 compiler setup is required for supported platforms.
 
+Install from npm directly:
+
+```bash
+npm install --save-dev @fasaled/sailkari
+npx @fasaled/sailkari
+```
+
 Sailkari works anywhere the native addon runs. It stores classifications in
 `.sailkari/results.json` inside the evaluated folder, making repeated runs portable across
 macOS, Linux, and Windows.
 
 ## Install and run
 
+The package is published as `@fasaled/sailkari`, while the executable remains `sailkari`.
+
 Run the full-screen terminal interface without a global installation:
 
 ```bash
-npx sailkari
+npx @fasaled/sailkari
 ```
 
 Or install globally:
 
 ```bash
-npm install --global sailkari
+npm install --global @fasaled/sailkari
 sailkari help
 ```
+
+Sailkari has two presentation modes in the same executable:
+
+```bash
+# Interactive terminal UI
+sailkari
+
+# MCP server over stdio for an external agent
+sailkari --mcp
+```
+
+Both modes use the same application engine, model lifecycle, prompt configuration,
+classification pipeline, context-reuse modes, result store, and benchmark metrics. MCP only
+changes how those operations are exposed to the client. It provides tools for loading a model,
+setting a prompt, evaluating documents, and reading or removing stored classifications.
+
+## Architecture
+
+Sailkari is a single executable with two presentation layers over the same core:
+
+```text
+sailkari                → TUI (Ink)
+sailkari --mcp          → MCP server over stdio
+
+shared application core
+  ├─ model lifecycle
+  ├─ system prompt management
+  ├─ document classification
+  ├─ context reuse modes
+  ├─ results storage
+  └─ evaluation metrics
+```
+
+The TUI and MCP adapters both call the same application service; they only differ in how they
+render or return the result. This keeps the model logic, evaluation logic, and stored results
+consistent regardless of the client interface.
+
+The MCP resource `sailkari://system-prompt-contract` describes the system-prompt format, and
+the `generate-system-prompt` MCP prompt helps an agent produce a compatible prompt.
 
 Install from source:
 

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
-import { render } from "ink";
-import React from "react";
-import { App } from "./tui.js";
-
-render(<App />, { alternateScreen: true });
+if (process.argv.includes("--mcp")) {
+	const { runMcpServer } = await import("./mcp.js");
+	await runMcpServer();
+} else {
+	const [{ render }, React, { App }] = await Promise.all([
+		import("ink"),
+		import("react"),
+		import("./tui.js"),
+	]);
+	render(React.createElement(App), { alternateScreen: true });
+}

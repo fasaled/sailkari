@@ -1,11 +1,7 @@
 import { parentPort } from "node:worker_threads";
 import { basename, resolve } from "node:path";
-import { ClassificationStore } from "./classification-store.js";
-import { loadLabels, processFile } from "./classifier.js";
-import { scanFolder } from "./file-scanner.js";
-import { createLLMEngine, type EngineContext } from "./llm-engine.js";
+import { SailkariApplication } from "./application.js";
 import type { RunnableCommand } from "./command-queue.js";
-import { DEFAULT_SYSTEM_PROMPT, inspectSystemPrompt, loadSystemPrompt } from "./prompt.js";
 import { formatEvaluationSummaryTable, formatEvaluationTableHeader, formatEvaluationTableRow, summarizeEvaluation } from "./evaluation-metrics.js";
 
 interface RunMessage {
@@ -22,7 +18,7 @@ const nativeLogger = (level: string, message: string) => {
     post({ type: "native-log", id: activeOperationId, level, text });
   }
 };
-let engine = createLLMEngine(nativeLogger);
+const application = new SailkariApplication(nativeLogger);
 const controllers = new Map<number, AbortController>();
 
 function post(message: object): void {
@@ -39,57 +35,38 @@ async function run({ id, command, systemPrompt }: RunMessage): Promise<void> {
     if (command.type === "model") {
       const modelPath = resolve(command.path);
       post({ type: "event", id, text: `Loading model: ${modelPath}` });
-      await engine.dispose();
-      engine = createLLMEngine(nativeLogger);
-      await engine.loadModel(modelPath);
+      await application.loadModel(modelPath);
       signal.throwIfAborted();
       post({ type: "model-loaded", id, modelPath });
     } else if (command.type === "prompt") {
-      if (command.path === null) {
-        post({ type: "prompt-loaded", id, prompt: DEFAULT_SYSTEM_PROMPT, systemPromptPath: null, warnings: [] });
-      } else {
-        const systemPromptPath = resolve(command.path);
-        const prompt = await loadSystemPrompt(systemPromptPath);
-        signal.throwIfAborted();
-        post({ type: "prompt-loaded", id, prompt, systemPromptPath, warnings: inspectSystemPrompt(prompt) });
-      }
+      const prompt = await application.loadSystemPrompt(command.path);
+      signal.throwIfAborted();
+      post({ type: "prompt-loaded", id, prompt: prompt.prompt, systemPromptPath: prompt.path, warnings: prompt.warnings });
     } else if (command.type === "classify") {
-      const startedAt = performance.now();
-      const labels = await loadLabels(resolve(command.labels));
-      const folder = resolve(command.folder);
-      const store = new ClassificationStore(folder);
-      const files = scanFolder(folder);
-      const preparationMs = performance.now() - startedAt;
-      const results = [];
-      const commandContext = command.contextReuse === "command" ? await engine.createContext() : undefined;
-      post({ type: "event", id, text: `Benchmarking ${files.length} files in ${folder} (${command.contextReuse === "none" ? "fresh context per call" : `reuse context per ${command.contextReuse}`})` });
-      for (const line of formatEvaluationTableHeader()) post({ type: "event", id, text: line, tone: "muted" });
-      try {
-        for (const filePath of files) {
-          signal.throwIfAborted();
-          if (commandContext && results.length > 0) await commandContext.clearHistory();
-          const fileContext: EngineContext | undefined = command.contextReuse === "file" ? await engine.createContext() : commandContext;
-          try {
-            const result = await processFile(filePath, labels, command.force, engine, store, systemPrompt, signal, () => {}, fileContext);
-            results.push(result);
-            const name = basename(filePath);
-            post({ type: "event", id, text: formatEvaluationTableRow(name, result), tone: result.status === "ok" ? "success" : result.status === "skip" ? "muted" : undefined });
-          } finally {
-            if (command.contextReuse === "file") await fileContext?.dispose();
-          }
-        }
-      } finally {
-        await commandContext?.dispose();
-      }
-      const summary = summarizeEvaluation(results, performance.now() - startedAt, preparationMs);
-      for (const line of formatEvaluationSummaryTable(summary)) post({ type: "event", id, text: line, tone: "success" });
+      const evaluation = await application.evaluate({
+        folder: command.folder,
+        labels: command.labels,
+        force: command.force,
+        contextReuse: command.contextReuse,
+        signal,
+        onStart: (folder, fileCount) => {
+          post({ type: "event", id, text: `Benchmarking ${fileCount} files in ${folder} (${command.contextReuse === "none" ? "fresh context per call" : `reuse context per ${command.contextReuse}`})` });
+          for (const line of formatEvaluationTableHeader()) post({ type: "event", id, text: line, tone: "muted" });
+        },
+        onProgress: (filePath, current, total, message) => post({ type: "progress", id, text: `${basename(filePath)}: ${message} (${current}/${total})` }),
+        onResult: (result) => {
+          const name = basename(result.filePath);
+          post({ type: "event", id, text: formatEvaluationTableRow(name, result), tone: result.status === "ok" ? "success" : result.status === "skip" ? "muted" : undefined });
+        },
+      });
+      for (const line of formatEvaluationSummaryTable(evaluation.summary)) post({ type: "event", id, text: line, tone: "success" });
     } else if (command.type === "list-tags" || command.type === "remove-tags") {
-      const store = new ClassificationStore(resolve(command.folder));
-      for (const entry of store.entries()) {
+      const entries = application.listClassifications(command.folder);
+      if (command.type === "remove-tags") application.removeClassifications(command.folder);
+      for (const entry of entries) {
         signal.throwIfAborted();
         if (command.type === "list-tags") post({ type: "event", id, text: `${basename(entry.filePath)} -> ${entry.labels.join(", ") || "no label"}` });
         else {
-          store.remove(entry.filePath);
           post({ type: "event", id, text: `${basename(entry.filePath)} -> removed`, tone: "success" });
         }
       }
