@@ -34,6 +34,10 @@ export interface ProcessingResult {
   chunks?: number;
   calls?: number;
   reason?: string;
+  durationMs?: number;
+  inferenceMs?: number;
+  sourceBytes?: number;
+  inputTokensEstimate?: number;
 }
 
 export interface ProcessingSummary {

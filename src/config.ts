@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 export interface SailkariConfig {
   modelPath?: string;
   systemPromptPath?: string;
+  commandHistory?: string[];
 }
 
 export function getConfigPath(): string {
@@ -17,6 +18,7 @@ export async function loadConfig(path = getConfigPath()): Promise<SailkariConfig
     return {
       ...(typeof parsed.modelPath === "string" ? { modelPath: parsed.modelPath } : {}),
       ...(typeof parsed.systemPromptPath === "string" ? { systemPromptPath: parsed.systemPromptPath } : {}),
+      ...(Array.isArray(parsed.commandHistory) ? { commandHistory: parsed.commandHistory.filter((entry): entry is string => typeof entry === "string") } : {}),
     };
   } catch {
     return {};

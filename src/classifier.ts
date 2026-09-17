@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
-import type { LLMEngine } from "./llm-engine.js";
+import type { EngineContext, LLMEngine } from "./llm-engine.js";
 import type { Label, ProcessingResult, LabelsFile } from "./types.js";
 import { extractFileInfo } from "./metadata.js";
 import type { ClassificationStore } from "./classification-store.js";
 import { determineStrategy } from "./context.js";
-import { startProgress, updateProgress } from "./progress.js";
+import type { ProgressCallback } from "./llm-engine.js";
 
 export async function processFile(
   filePath: string,
@@ -13,15 +13,23 @@ export async function processFile(
   force: boolean,
   engine: LLMEngine,
   store: ClassificationStore,
-  systemPrompt?: string
+  systemPrompt?: string,
+  signal?: AbortSignal,
+  onProgress?: ProgressCallback,
+  context?: EngineContext
 ): Promise<ProcessingResult> {
+  const startedAt = performance.now();
+  signal?.throwIfAborted();
   const hasAIClassified = store.has(filePath);
+  const storedLabels = hasAIClassified ? store.getLabels(filePath) : [];
 
-  if (hasAIClassified && !force) {
+  if (storedLabels.length > 0 && !force) {
     return {
       status: "skip",
       filePath,
+      labels: storedLabels,
       reason: "already classified",
+      durationMs: performance.now() - startedAt,
     };
   }
 
@@ -35,16 +43,13 @@ export async function processFile(
       status: "skip",
       filePath,
       reason: "cannot read file",
+      durationMs: performance.now() - startedAt,
     };
   }
 
-  startProgress(filename, 1, "reading");
+  const reportProgress = onProgress ?? (() => {});
 
-  const onProgress = (current: number, total: number, message: string) => {
-    updateProgress(filename, current, total, message);
-  };
-
-  const { result, chunks, calls } = await determineStrategy(
+  const { result, chunks, calls, inferenceMs } = await determineStrategy(
     content,
     {
       filename: fileInfo.name,
@@ -56,8 +61,10 @@ export async function processFile(
     },
     labels,
     engine,
-    onProgress,
-    systemPrompt
+    reportProgress,
+    systemPrompt,
+    signal,
+    context
   );
 
   if (!result || result.labels.length === 0) {
@@ -67,6 +74,10 @@ export async function processFile(
     return {
       status: "none",
       filePath,
+      durationMs: performance.now() - startedAt,
+      inferenceMs,
+      sourceBytes: fileInfo.size,
+      inputTokensEstimate: Math.ceil(content.length / 4),
     };
   }
 
@@ -82,6 +93,10 @@ export async function processFile(
     labels: result.labels,
     chunks,
     calls,
+    durationMs: performance.now() - startedAt,
+    inferenceMs,
+    sourceBytes: fileInfo.size,
+    inputTokensEstimate: Math.ceil(content.length / 4),
   };
 }
 

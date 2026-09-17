@@ -12,6 +12,7 @@ function createDriver(response = "banking") {
       onToken?.(response);
       return response;
     }),
+    clearHistory: vi.fn(async () => {}),
     dispose: vi.fn(async () => {}),
   };
   const model: EngineModel = {
@@ -79,6 +80,28 @@ describe("LLMEngine", () => {
     expect(result).toEqual({ labels: ["banking"] });
     expect(progress).toHaveBeenNthCalledWith(1, 0, 1, "classifying");
     expect(progress).toHaveBeenNthCalledWith(2, 1, 1, "done");
+  });
+
+  test("reuses and clears a supplied context between chunks", async () => {
+    const { driver, model, context } = createDriver();
+    const engine = new LLMEngine(driver);
+    await engine.loadModel("/models/test.gguf");
+    const reusableContext = await engine.createContext();
+
+    await engine.classifyChunked(
+      "word ".repeat(7_000),
+      [{ name: "banking", description: "financial documents" }],
+      undefined,
+      undefined,
+      undefined,
+      reusableContext
+    );
+    await reusableContext.dispose();
+
+    expect(model.createContext).toHaveBeenCalledOnce();
+    expect(context.generate).toHaveBeenCalledTimes(2);
+    expect(context.clearHistory).toHaveBeenCalledOnce();
+    expect(context.dispose).toHaveBeenCalledOnce();
   });
 
   test("disposes the model and native driver exactly once", async () => {

@@ -4,8 +4,28 @@
   "type": "module",
   "license": "MIT",
   "description": "Classify local text files with GGUF models using in-process llama.cpp inference",
+  "keywords": [
+    "ai",
+    "classifier",
+    "documents",
+    "gguf",
+    "llama.cpp",
+    "local-first",
+    "tui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fasaled/local-ai-classifier.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fasaled/local-ai-classifier/issues"
+  },
+  "homepage": "https://github.com/fasaled/local-ai-classifier#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "sailkari": "./dist/index.js"
+    "sailkari": "dist/index.js"
   },
   "files": [
     "dist/",
@@ -21,7 +41,8 @@
     "test": "vitest run src",
     "test:e2e": "vitest run e2e",
     "typecheck": "tsc -p tsconfig.json",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "ink": "^7.1.1",

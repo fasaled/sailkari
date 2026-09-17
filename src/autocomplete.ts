@@ -9,16 +9,21 @@ function currentToken(input: string): { before: string; token: string } {
   return { before: input.slice(0, input.length - match[1]!.length), token: match[1]! };
 }
 
-function pathCandidates(token: string, predicate: (path: string) => boolean): string[] {
-  const base = token ? dirname(token) : ".";
-  const prefix = token ? basename(token) : "";
+function pathCandidates(token: string, predicate: (path: string) => boolean, defaultBase = "."): string[] {
+  const hasTrailingSeparator = token.endsWith("/");
+  const base = !token ? defaultBase : hasTrailingSeparator ? token : token.includes("/") ? dirname(token) : defaultBase;
+  const prefix = token && !hasTrailingSeparator ? basename(token) : "";
   const directory = resolve(base === "." && token.startsWith("/") ? "/" : base);
   try {
     return readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.name.startsWith(prefix))
       .map((entry) => join(base, entry.name))
       .filter((candidate) => {
-        try { return predicate(resolve(candidate)); } catch { return false; }
+        try {
+          return statSync(resolve(candidate)).isDirectory() || predicate(resolve(candidate));
+        } catch {
+          return false;
+        }
       })
       .map((candidate) => candidate + (statSync(resolve(candidate)).isDirectory() ? "/" : ""));
   } catch {
@@ -33,7 +38,8 @@ export function completeInput(input: string): string[] {
   }
 
   const command = input.trim().split(/\s+/)[0];
-  const argumentIndex = input.trim().split(/\s+/).length - 1;
+  const tokens = input.trim().split(/\s+/);
+  const argumentIndex = tokens.length - 1 + (input.endsWith(" ") ? 1 : 0);
   if (command === "model" && argumentIndex === 1) {
     return pathCandidates(token, (path) => extname(path).toLowerCase() === ".gguf");
   }

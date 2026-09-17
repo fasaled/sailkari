@@ -1,6 +1,7 @@
 import {
   getLlama,
   LlamaChatSession,
+  LlamaLogLevel,
   type Llama,
   type LlamaContext,
   type LlamaModel,
@@ -14,6 +15,7 @@ const SYSTEM_RESERVE = 1024;
 export const EFFECTIVE_LIMIT = MAX_CONTEXT - SYSTEM_RESERVE;
 
 export type ProgressCallback = (current: number, total: number, message: string) => void;
+export type NativeLogCallback = (level: LlamaLogLevel, message: string) => void;
 
 const noopProgress: ProgressCallback = () => {};
 
@@ -22,10 +24,12 @@ export interface GenerationOptions {
   prompt: string;
   maxTokens?: number;
   onToken?: (text: string) => void;
+  signal?: AbortSignal;
 }
 
 export interface EngineContext {
   generate(options: GenerationOptions): Promise<string>;
+  clearHistory(): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -54,6 +58,7 @@ class NodeLlamaContext implements EngineContext {
         maxTokens: options.maxTokens ?? 64,
         temperature: 0,
         onTextChunk: options.onToken,
+        signal: options.signal,
       });
     } finally {
       session.dispose();
@@ -62,6 +67,10 @@ class NodeLlamaContext implements EngineContext {
 
   async dispose(): Promise<void> {
     await this.context.dispose();
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.context.getSequence().clearHistory();
   }
 }
 
@@ -83,10 +92,14 @@ class NodeLlamaModel implements EngineModel {
 class NodeLlamaDriver implements EngineDriver {
   private llama: Llama | null = null;
 
+  constructor(private readonly logger?: NativeLogCallback) {}
+
   async loadModel(modelPath: string): Promise<EngineModel> {
     this.llama ??= await getLlama({
       build: "never",
       usePrebuiltBinaries: true,
+      logLevel: LlamaLogLevel.warn,
+      logger: this.logger,
     });
     const model = await this.llama.loadModel({ modelPath });
     return new NodeLlamaModel(model);
@@ -98,6 +111,10 @@ class NodeLlamaDriver implements EngineDriver {
       this.llama = null;
     }
   }
+}
+
+export function createLLMEngine(logger: NativeLogCallback): LLMEngine {
+  return new LLMEngine(new NodeLlamaDriver(logger));
 }
 
 export class LLMEngine {
@@ -136,13 +153,18 @@ export class LLMEngine {
     content: string,
     labels: Label[],
     onProgress: ProgressCallback = noopProgress,
-    systemPrompt: string = DEFAULT_SYSTEM_PROMPT
+    systemPrompt: string = DEFAULT_SYSTEM_PROMPT,
+    signal?: AbortSignal,
+    context?: EngineContext
   ): Promise<ClassificationResult | null> {
+    signal?.throwIfAborted();
     onProgress(0, 1, "classifying");
-    const text = await this.generate({
+    const options = {
       systemPrompt,
       prompt: buildUserPayload(labels, content),
-    });
+      signal,
+    };
+    const text = context ? await context.generate(options) : await this.generate(options);
     onProgress(1, 1, "done");
 
     const result = parseResponse(text, labels);
@@ -153,7 +175,9 @@ export class LLMEngine {
     content: string,
     labels: Label[],
     onProgress: ProgressCallback = noopProgress,
-    systemPrompt: string = DEFAULT_SYSTEM_PROMPT
+    systemPrompt: string = DEFAULT_SYSTEM_PROMPT,
+    signal?: AbortSignal,
+    context?: EngineContext
   ): Promise<{ result: ClassificationResult | null; chunks: number; calls: number }> {
     const chunkSize = EFFECTIVE_LIMIT - 2000;
     const chunks: string[] = [];
@@ -173,14 +197,17 @@ export class LLMEngine {
 
     const labelCounts: Record<string, number> = {};
     let calls = 0;
-
     for (let i = 0; i < chunks.length; i++) {
+      signal?.throwIfAborted();
+      if (i > 0) await context?.clearHistory();
       onProgress(i, chunks.length, `chunk ${i + 1}/${chunks.length}`);
       const chunk = chunks[i]!;
-      const text = await this.generate({
+      const options = {
         systemPrompt,
         prompt: buildUserPayload(labels, chunk),
-      });
+        signal,
+      };
+      const text = context ? await context.generate(options) : await this.generate(options);
       calls++;
 
       const parsed = parseResponse(text, labels);

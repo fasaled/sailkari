@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "files": {
+    "adoption-papers.txt": {
+      "labels": [
+        "pets"
+      ]
+    },
+    "bank-statement.txt": {
+      "labels": [
+        "banking"
+      ]
+    },
+    "birthday-card.txt": {
+      "labels": [
+        "family"
+      ]
+    },
+    "brand-guidelines.txt": {
+      "labels": [
+        "marketing"
+      ]
+    },
+    "cloud-security-guide.txt": {
+      "labels": [
+        "technology"
+      ]
+    },
+    "credit-card-bill.txt": {
+      "labels": [
+        "banking"
+      ]
+    },
+    "holiday-card.txt": {
+      "labels": [
+        "family"
+      ]
+    },
+    "investment-statement.txt": {
+      "labels": [
+        "banking"
+      ]
+    },
+    "medical-record.txt": {
+      "labels": [
+        "family"
+      ]
+    },
+    "microservices-architecture.txt": {
+      "labels": [
+        "technology"
+      ]
+    },
+    "press-release.txt": {
+      "labels": [
+        "marketing"
+      ]
+    },
+    "sales-proposal.txt": {
+      "labels": [
+        "marketing"
+      ]
+    },
+    "school-notice.txt": {
+      "labels": [
+        "family"
+      ]
+    },
+    "social-media-calendar.txt": {
+      "labels": [
+        "marketing"
+      ]
+    },
+    "tax-return.txt": {
+      "labels": [
+        "banking"
+      ]
+    },
+    "training-notes.txt": {
+      "labels": [
+        "pets"
+      ]
+    },
+    "vaccination-cert.txt": {
+      "labels": [
+        "pets"
+      ]
+    },
+    "vet-records.txt": {
+      "labels": [
+        "pets"
+      ]
+    }
+  }
+}
