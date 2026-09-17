@@ -1,22 +1,22 @@
 # Sailkari
 
-**Sailkari** (Basque for “the one who classifies”) classifies local text files with a
-user-provided GGUF model. Inference runs in-process through
-[`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp); no local server, HTTP port,
-external executable, Bun runtime, or cloud API is used.
+**Sailkari** (Basque for “the one who classifies”) is a local document classifier for
+text files. It loads an instruction-tuned GGUF model through
+[`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp), scans a folder, and assigns
+one label per file based on a YAML taxonomy you define.
 
-The model is deliberately not bundled. Bring any instruction-tuned GGUF supported by
-llama.cpp. File contents remain local.
+This workflow is designed for local-first use: the model and the files stay on the machine,
+results are written back to the folder in `.sailkari/results.json`, and the same setup works
+across macOS, Linux, and Windows.
 
 ## Requirements
 
 - Node.js 20 or newer
 - An instruction-tuned GGUF model downloaded separately
 
-The npm installation includes the llama.cpp native addon and libraries for the current
-platform. npm selects the appropriate prebuilt package for macOS, Linux, or Windows and for
-the current architecture. Sailkari disables source-build fallback: no compiler is required,
-and an unsupported platform fails explicitly instead of downloading source code at runtime.
+The npm package includes the compatible llama.cpp native addon and libraries for the current
+platform. npm picks the matching prebuilt package for your OS and architecture, so no
+compiler setup is required for supported platforms.
 
 File classification works anywhere the native addon runs. Results are stored portably in
 `.sailkari/results.json` inside each classified folder, so the same workflow works on macOS,
@@ -112,17 +112,18 @@ start the TUI
   → dispose model and native runtime on exit
 ```
 
-No model or document data is sent over the network. npm may use the network during
-installation to retrieve Sailkari's dependencies and the platform-specific native prebuilt.
+Sailkari keeps the model and document data local while the session is active. npm may access
+the network during installation to fetch dependencies and the platform-specific native prebuilt.
 
 ## Packaging
 
 The published Sailkari package contains the compiled JavaScript CLI. `node-llama-cpp` is a
-normal runtime dependency and provides platform packages such as
+runtime dependency and provides the platform packages for each supported environment, such as
 `@node-llama-cpp/mac-arm64-metal`, `@node-llama-cpp/linux-x64`, and
-`@node-llama-cpp/win-x64`. npm installs only compatible optional dependencies.
+`@node-llama-cpp/win-x64`.
 
-GGUF files are excluded from the package and must be supplied with the `model` command.
+GGUF files are excluded from the package and are provided separately through the `model`
+command.
 
 ## Development
 
