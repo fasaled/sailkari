@@ -1,9 +1,13 @@
 # Sailkari
 
-**Sailkari** (Basque for “the one who classifies”) is a local benchmark TUI for comparing
-instruction-tuned GGUF models on document classification. Give it a corpus of text files and
-a YAML taxonomy, then run the same workload across models to compare classification output,
-latency, throughput, chunking behavior, and context reuse.
+**Sailkari** (Basque for “the one who classifies”) is a local-first document classifier for
+GGUF models. It runs in two modes from the same executable:
+
+- a full-screen terminal UI for interactive benchmarking and classification workflows
+- an MCP server over stdio for agent-based clients
+
+Give it a corpus of text files and a YAML taxonomy, then run the same workload across models
+to compare classification output, latency, throughput, chunking behavior, and context reuse.
 
 Inference runs through [`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp). The
 model, corpus, prompts, and results remain on the local machine. Sailkari is intended for
@@ -56,10 +60,31 @@ sailkari
 sailkari --mcp
 ```
 
-Both modes use the same application engine, model lifecycle, prompt configuration,
-classification pipeline, context-reuse modes, result store, and benchmark metrics. MCP only
-changes how those operations are exposed to the client. It provides tools for loading a model,
-setting a prompt, evaluating documents, and reading or removing stored classifications.
+The TUI and MCP server share the same application core: model lifecycle, prompt management,
+classification pipeline, context-reuse controls, result storage, and benchmark metrics. MCP only
+changes the presentation layer. It exposes the same functionality to external clients through
+standard MCP tools, resources, and prompts.
+
+## MCP interface
+
+When launched with `sailkari --mcp`, Sailkari exposes a standard MCP server over stdio.
+Clients can discover and call the following tools:
+
+- `load_model`: load a GGUF model from disk
+- `set_system_prompt`: set the classifier system prompt
+- `classify_documents`: classify a folder using a YAML taxonomy and benchmark settings
+- `list_classifications`: inspect stored labels for a folder
+- `remove_classifications`: clear stored labels for a folder
+
+The server also exposes the following resources and prompts:
+
+- `sailkari://system-prompt-contract`: contract describing the valid output format for a
+  classifier prompt
+- `generate-system-prompt`: prompt helper that generates a compatible system prompt from a
+  supplied taxonomy
+
+This allows MCP clients to reuse the same model engine, prompt validation, classification flow,
+and result storage without going through the interactive TUI.
 
 ## Architecture
 
