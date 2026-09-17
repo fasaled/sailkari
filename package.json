@@ -1,6 +1,6 @@
 {
   "name": "@fasaled/sailkari",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "description": "Classify local text files with GGUF models using in-process llama.cpp inference",
