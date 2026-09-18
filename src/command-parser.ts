@@ -75,8 +75,6 @@ export function parseCommand(input: string): Command {
   }
 }
 
-const HELP_COMMAND_WIDTH = 38;
-
 const HELP_ENTRIES = [
   ["model <path.gguf>", "Load and save the model"],
   ["prompt <path|default>", "Configure the system prompt"],
@@ -94,6 +92,8 @@ const HELP_ENTRIES = [
   ["help", "Show this help"],
   ["quit", "Exit Sailkari"],
 ] as const;
+
+const HELP_COMMAND_WIDTH = Math.max(...HELP_ENTRIES.map(([command]) => command.length)) + 2;
 
 export const HELP_TEXT = [
   "COMMAND".padEnd(HELP_COMMAND_WIDTH) + "DESCRIPTION",

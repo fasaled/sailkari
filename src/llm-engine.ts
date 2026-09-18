@@ -4,6 +4,7 @@ import {
   LlamaLogLevel,
   type Llama,
   type LlamaContext,
+  type LlamaContextSequence,
   type LlamaModel,
 } from "node-llama-cpp";
 import type { ClassificationResult, Label } from "./types.js";
@@ -44,11 +45,15 @@ export interface EngineDriver {
 }
 
 class NodeLlamaContext implements EngineContext {
-  constructor(private readonly context: LlamaContext) {}
+  private readonly sequence: LlamaContextSequence;
+
+  constructor(private readonly context: LlamaContext) {
+    this.sequence = context.getSequence();
+  }
 
   async generate(options: GenerationOptions): Promise<string> {
     const session = new LlamaChatSession({
-      contextSequence: this.context.getSequence(),
+      contextSequence: this.sequence,
       systemPrompt: options.systemPrompt,
       autoDisposeSequence: false,
     });
@@ -66,11 +71,15 @@ class NodeLlamaContext implements EngineContext {
   }
 
   async dispose(): Promise<void> {
-    await this.context.dispose();
+    try {
+      await this.sequence.dispose();
+    } finally {
+      await this.context.dispose();
+    }
   }
 
   async clearHistory(): Promise<void> {
-    await this.context.getSequence().clearHistory();
+    await this.sequence.clearHistory();
   }
 }
 

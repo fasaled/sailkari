@@ -33,8 +33,10 @@ describe("parseCommand", () => {
 
   test("formats help as an aligned command table", () => {
     const lines = HELP_TEXT.split("\n");
+    const descriptionColumn = lines[0]!.indexOf("DESCRIPTION");
 
-    expect(lines[0]).toBe("COMMAND                               DESCRIPTION");
-    expect(lines.find((line) => line.startsWith("queue move"))?.indexOf("Reorder")).toBe(38);
+    expect(descriptionColumn).toBeGreaterThan(38);
+    expect(lines.find((line) => line.startsWith("queue move"))?.indexOf("Reorder")).toBe(descriptionColumn);
+    expect(lines.find((line) => line.startsWith("classify <folder> <labels.yaml> --reuse-context-command"))?.indexOf("Reuse")).toBe(descriptionColumn);
   });
 });
