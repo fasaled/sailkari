@@ -86,7 +86,8 @@ export async function watchFolder(opts: WatchOptions): Promise<FSWatcher> {
     handleEvent(event, name);
   });
 
-  watcher.on("error", (e) => {
+  watcher.on("error", (e: any) => {
+    if (aborted || opts.signal?.aborted || e?.name === "AbortError" || e?.code === "ABORT_ERR") return;
     console.error("Watcher error:", e.message);
   });
 
