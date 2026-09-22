@@ -1,7 +1,10 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { KNOWN_CLOUD_MODELS, KNOWN_PROVIDERS } from "./api-keys.js";
 
-const COMMANDS = ["model", "prompt", "classify", "list-tags", "remove-tags", "help", "quit"];
+const COMMANDS = ["model", "prompt", "classify", "list-tags", "remove-tags", "key", "queue", "cancel", "help", "quit"];
+const KEY_ACTIONS = ["set", "get", "list", "remove"];
+const CLOUD_MODEL_NAMES = Object.keys(KNOWN_CLOUD_MODELS);
 
 function currentToken(input: string): { before: string; token: string } {
   const match = input.match(/(?:^|\s)([^\s]*)$/);
@@ -41,7 +44,15 @@ export function completeInput(input: string): string[] {
   const tokens = input.trim().split(/\s+/);
   const argumentIndex = tokens.length - 1 + (input.endsWith(" ") ? 1 : 0);
   if (command === "model" && argumentIndex === 1) {
-    return pathCandidates(token, (path) => extname(path).toLowerCase() === ".gguf");
+    const cloudCandidates = CLOUD_MODEL_NAMES.filter((name) => name.toLowerCase().startsWith(token.toLowerCase()));
+    const fileCandidates = pathCandidates(token, (path) => extname(path).toLowerCase() === ".gguf");
+    return [...cloudCandidates, ...fileCandidates];
+  }
+  if (command === "key" && argumentIndex === 1) {
+    return KEY_ACTIONS.filter((action) => action.startsWith(token.toLowerCase()));
+  }
+  if (command === "key" && argumentIndex === 2 && ["set", "get", "remove", "delete"].includes(tokens[1]?.toLowerCase() ?? "")) {
+    return [...KNOWN_PROVIDERS].filter((provider) => provider.startsWith(token.toLowerCase()));
   }
   if (command === "prompt" && argumentIndex === 1) {
     return pathCandidates(token, (path) => statSync(path).isFile());

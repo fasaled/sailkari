@@ -30,6 +30,7 @@ export interface GenerationOptions {
 
 export interface EngineContext {
   generate(options: GenerationOptions): Promise<string>;
+  classifyDirect?(content: string, labels: Label[], signal?: AbortSignal, systemPrompt?: string): Promise<ClassificationResult | null>;
   clearHistory(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -122,8 +123,8 @@ class NodeLlamaDriver implements EngineDriver {
   }
 }
 
-export function createLLMEngine(logger: NativeLogCallback): LLMEngine {
-  return new LLMEngine(new NodeLlamaDriver(logger));
+export function createLLMEngine(logger?: NativeLogCallback, driver?: EngineDriver): LLMEngine {
+  return new LLMEngine(driver ?? new NodeLlamaDriver(logger));
 }
 
 export class LLMEngine {
@@ -168,16 +169,29 @@ export class LLMEngine {
   ): Promise<ClassificationResult | null> {
     signal?.throwIfAborted();
     onProgress(0, 1, "classifying");
-    const options = {
-      systemPrompt,
-      prompt: buildUserPayload(labels, content),
-      signal,
-    };
-    const text = context ? await context.generate(options) : await this.generate(options);
-    onProgress(1, 1, "done");
+    const ctx = context ?? await this.createContext();
+    try {
+      if (ctx.classifyDirect) {
+        const result = await ctx.classifyDirect(content, labels, signal, systemPrompt);
+        onProgress(1, 1, "done");
+        return result;
+      }
 
-    const result = parseResponse(text, labels);
-    return result?.labels.length ? { labels: result.labels.slice(0, 1) } : null;
+      const options = {
+        systemPrompt,
+        prompt: buildUserPayload(labels, content),
+        signal,
+      };
+      const text = await ctx.generate(options);
+      onProgress(1, 1, "done");
+
+      const result = parseResponse(text, labels);
+      return result?.labels.length ? { labels: result.labels.slice(0, 1) } : null;
+    } finally {
+      if (!context) {
+        await ctx.dispose();
+      }
+    }
   }
 
   async classifyChunked(
@@ -206,23 +220,38 @@ export class LLMEngine {
 
     const labelCounts: Record<string, number> = {};
     let calls = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      signal?.throwIfAborted();
-      if (i > 0) await context?.clearHistory();
-      onProgress(i, chunks.length, `chunk ${i + 1}/${chunks.length}`);
-      const chunk = chunks[i]!;
-      const options = {
-        systemPrompt,
-        prompt: buildUserPayload(labels, chunk),
-        signal,
-      };
-      const text = context ? await context.generate(options) : await this.generate(options);
-      calls++;
+    const ctx = context ?? await this.createContext();
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        signal?.throwIfAborted();
+        if (i > 0) await ctx.clearHistory();
+        onProgress(i, chunks.length, `chunk ${i + 1}/${chunks.length}`);
+        const chunk = chunks[i]!;
+        calls++;
 
-      const parsed = parseResponse(text, labels);
-      if (parsed?.labels.length) {
-        const label = parsed.labels[0]!;
-        labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+        if (ctx.classifyDirect) {
+          const directResult = await ctx.classifyDirect(chunk, labels, signal, systemPrompt);
+          if (directResult?.labels.length) {
+            const label = directResult.labels[0]!;
+            labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+          }
+        } else {
+          const options = {
+            systemPrompt,
+            prompt: buildUserPayload(labels, chunk),
+            signal,
+          };
+          const text = await ctx.generate(options);
+          const parsed = parseResponse(text, labels);
+          if (parsed?.labels.length) {
+            const label = parsed.labels[0]!;
+            labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+          }
+        }
+      }
+    } finally {
+      if (!context) {
+        await ctx.dispose();
       }
     }
 

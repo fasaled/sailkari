@@ -24,12 +24,88 @@ describe("MCP presentation", () => {
     const result = await client.listTools();
 
     expect(result.tools.map((tool) => tool.name)).toEqual([
+      "list_models",
       "load_model",
       "set_system_prompt",
       "classify_documents",
       "list_classifications",
       "remove_classifications",
     ]);
+
+    // Ensure strictly no API key management or leakage tools exist in MCP
+    for (const tool of result.tools) {
+      expect(tool.name.toLowerCase()).not.toContain("key");
+      expect(tool.name.toLowerCase()).not.toContain("secret");
+      expect(tool.description?.toLowerCase()).not.toContain("api key");
+    }
+  });
+
+  test("list_models reports models without exposing any secret keys", async () => {
+    const originalKey = process.env.TYPESAFE_API_KEY;
+    process.env.TYPESAFE_API_KEY = "ts_secret_live_key_999";
+    try {
+      const client = await connectTestServer();
+      const result = await client.callTool({
+        name: "list_models",
+        arguments: {},
+      });
+
+      expect(result.isError).not.toBe(true);
+      const structured = result.structuredContent as {
+        models: { id: string; available: boolean; provider?: string }[];
+      };
+      expect(structured.models).toBeDefined();
+      const jev = structured.models.find((m) => m.id === "jev");
+      expect(jev).toBeDefined();
+      expect(jev!.available).toBe(true);
+
+      // Verify no key string or hash leaked in serialized response
+      const rawText = JSON.stringify(result);
+      expect(rawText).not.toContain("ts_secret_live_key_999");
+    } finally {
+      if (originalKey) process.env.TYPESAFE_API_KEY = originalKey;
+      else delete process.env.TYPESAFE_API_KEY;
+    }
+  });
+
+  test("load_model fails with helpful message when cloud API key is missing", async () => {
+    const originalKey = process.env.TYPESAFE_API_KEY;
+    delete process.env.TYPESAFE_API_KEY;
+    delete process.env.JEV_API_KEY;
+    delete process.env.SAILKARI_KEY_TYPESAFE;
+    try {
+      const client = await connectTestServer();
+      const result = await client.callTool({
+        name: "load_model",
+        arguments: { modelPath: "jev" },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain("API key for provider 'typesafe' is not configured");
+    } finally {
+      if (originalKey) process.env.TYPESAFE_API_KEY = originalKey;
+    }
+  });
+
+  test("load_model loads OpenAI-compatible cloud models when key is present", async () => {
+    const originalKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "sk-mock-key";
+    try {
+      const client = await connectTestServer();
+      const result = await client.callTool({
+        name: "load_model",
+        arguments: { modelPath: "openai:gpt-4o-mini" },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        modelPath: "openai:gpt-4o-mini",
+        loaded: true,
+      });
+    } finally {
+      if (originalKey) process.env.OPENAI_API_KEY = originalKey;
+      else delete process.env.OPENAI_API_KEY;
+    }
   });
 
   test("publishes the system prompt contract and generator prompt", async () => {

@@ -25,8 +25,12 @@ The architectural trajectory follows a coherent progression: transitioning from 
    - Replaced platform-locked `xattr` with portable `.sailkari/results.json` (`ClassificationStore`).
    - Replaced fragile `llama-server` child processes with in-process `node-llama-cpp` bindings.
    - Introduced a full-screen React/Ink Terminal UI (TUI) powered by an asynchronous worker thread (`operation-worker.ts`) and command queue.
-   - Implemented Model Context Protocol (MCP) server over stdio on top of a shared `SailkariApplication` core.
+    - Implemented Model Context Protocol (MCP) server over stdio on top of a shared `SailkariApplication` core.
     - Migrated developer tooling to Bun while preserving Node >= 20 distribution compatibility.
+
+5. **Phase 5: Hybrid Benchmarking & Cloud Model Integration (D19)**
+   - Added support for cloud decision models (starting with TypeSafe Jev System One model) to enable comparative benchmarking between local GGUF models and specialized cloud classification APIs.
+   - Established strict security isolation: TUI provides full CRUD key management and persistent config, environment variables allow headless MCP runs, and MCP never exposes secrets or mutation tools.
 
 ---
 
@@ -215,3 +219,19 @@ The architectural trajectory follows a coherent progression: transitioning from 
 - `docs/agents.md`: operational guide and constraints for coding agents and contributors.
 
 **Consequences:** Any contributor or agent working on the codebase has full access to the institutional knowledge, constraints, and architecture.
+
+---
+
+## D19 — Hybrid benchmarking for cloud models (TypeSafe Jev & OpenAI-compatible) with credential isolation
+
+**Context:** While local GGUF models running in-process via `node-llama-cpp` provide complete offline privacy, developers frequently need to benchmark local models against specialized cloud classification services (such as TypeSafe's Jev System One model) and frontier cloud LLMs (OpenAI GPT-4o, Groq Llama 3.3, OpenRouter) to evaluate tradeoffs in accuracy, latency, and cost across identical taxonomies.
+
+**Decision:**
+1. Extend `EngineDriver` and `EngineContext` to support cloud drivers:
+   - `JevCloudDriver`: maps taxonomies to TypeSafe Jev structured choice questions without text generation.
+   - `OpenAICompatibleDriver`: executes standard `/v1/chat/completions` requests against OpenAI, Groq, OpenRouter, and compatible endpoints.
+2. Provide CRUD commands in the TUI (`key set`, `key get`, `key list`, `key remove`) storing credentials in `~/.config/sailkari/config.json`.
+3. Support environment variables (`TYPESAFE_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `SAILKARI_KEY_<PROVIDER>`, `SAILKARI_API_KEYS`) with precedence over disk config, ideal for headless MCP execution.
+4. Apply the principle of least privilege to MCP: agents can discover authorized models (`list_models`) and load them (`load_model`), but MCP never exposes tools to mutate or read secret keys.
+
+**Consequences:** Sailkari evolves from a purely local GGUF executor into a flexible hybrid benchmarking harness capable of comparing on-device GGUF models against both cloud decision APIs and generative LLMs under a single evaluation protocol and taxonomy, while maintaining strict isolation of sensitive credentials.

@@ -60,9 +60,10 @@ Sailkari exposes **one application core** through **two presentation modes** fro
     │       LLM Engine Driver          │  │    Classification Pipeline │
     │      (src/llm-engine.ts)         │  │     (src/classifier.ts)    │
     ├──────────────────────────────────┤  ├────────────────────────────┤
-    │  - node-llama-cpp v3 bindings    │  │  - Chunking & Token Budget │
-    │  - Context reuse policies        │  │  - Majority Voting         │
-    │  - ChatSession & token stream    │  │  - Output Parser           │
+    │  - NodeLlamaDriver (node-llama)  │  │  - Chunking & Token Budget │
+    │  - JevCloudDriver (TypeSafe Jev) │  │  - Majority Voting         │
+    │  - OpenAICompatibleDriver        │  │  - Output Parser           │
+    │  - ChatSession / Direct Decision │  │                            │
     └──────────────────────────────────┘  └─────────────┬──────────────┘
                                                         │
                       ┌─────────────────────────────────┴──────────────┐
@@ -96,7 +97,7 @@ Sailkari exposes **one application core** through **two presentation modes** fro
 
 ## 4. Inference Engine and Context Lifecycle
 
-Sailkari uses `node-llama-cpp` (v3) to execute GGUF models directly in-process via Metal, CUDA, or CPU.
+Sailkari uses `node-llama-cpp` (v3) to execute local GGUF models directly in-process via Metal, CUDA, or CPU. For cloud-based evaluation, it utilizes specialized drivers (e.g. `JevCloudDriver` for TypeSafe Jev System One decision models) over HTTPS with native `fetch`.
 
 ### 4.1 Token Budgets and Context Limits
 - `MAX_CONTEXT`: 32,768 tokens.
@@ -107,14 +108,15 @@ Sailkari uses `node-llama-cpp` (v3) to execute GGUF models directly in-process v
 Sailkari introduces three distinct context-management policies via `--reuse-context-file` and `--reuse-context-command`:
 
 1. **`none` (Default):**
-   - A fresh `LlamaContext` is created for every model call and disposed immediately upon completion.
+   - For local GGUFs: a fresh `LlamaContext` is created for every model call and disposed immediately upon completion.
+   - For cloud models: stateless HTTP call per chunk/file.
    - Provides absolute isolation, preventing any memory retention or attention pollution between chunks or documents.
 2. **`file` (`--reuse-context-file`):**
-   - A single `LlamaContext` is shared across all chunks of a single document, then disposed.
-   - Between chunks, conversation history is explicitly cleared (`clearHistory()`).
+   - For local GGUFs: a single `LlamaContext` is shared across all chunks of a single document, then disposed. Between chunks, conversation history is explicitly cleared (`clearHistory()`).
+   - For cloud models: stateless context where `clearHistory()` and `dispose()` are safe no-ops.
 3. **`command` (`--reuse-context-command`):**
-   - A single `LlamaContext` is retained across the entire batch of files evaluated in the command.
-   - `clearHistory()` is called between consecutive files and chunks, eliminating reallocation latency while preserving benchmark isolation.
+   - For local GGUFs: a single `LlamaContext` is retained across the entire batch of files evaluated in the command. `clearHistory()` is called between consecutive files and chunks.
+   - For cloud models: stateless context across all calls.
 
 ---
 
@@ -173,9 +175,10 @@ Global user settings are stored in:
 `~/.config/sailkari/config.json`
 
 Contains:
-- `modelPath`: path to the last loaded GGUF model.
+- `modelPath`: path to the last loaded GGUF model or cloud model name (e.g. `jev`).
 - `systemPromptPath`: path to the active custom prompt file (if any).
 - `commandHistory`: array of previously executed commands.
+- `apiKeys`: dictionary of API keys per provider (`typesafe`, etc.) managed via TUI commands.
 
 ---
 
@@ -184,7 +187,7 @@ Contains:
 ### 7.1 TUI Commands
 
 ```text
-model <path.gguf>                  Load and persist the GGUF model
+model <path.gguf|name>             Load and persist GGUF or cloud model (e.g. jev)
 prompt <path|default>              Set default or custom system prompt
 classify <folder> <labels.yaml>   Classify documents in a folder
   [--force]                        Re-run inference even if cached
@@ -192,6 +195,10 @@ classify <folder> <labels.yaml>   Classify documents in a folder
   [--reuse-context-command]        Reuse context across the whole batch
 list-tags <folder>                 List stored classifications
 remove-tags <folder>               Remove stored classifications
+key set <provider> <key>           Save API key for a cloud provider
+key get <provider>                 Show configured API key for provider
+key list                           List configured providers
+key remove <provider>              Remove API key for provider
 queue                              List queued commands
 queue remove <pos>                 Remove command at position
 queue move <from> <to>             Reorder pending commands
@@ -206,7 +213,8 @@ quit                               Exit application
 Launched with `sailkari --mcp`. Exposes:
 
 - **Tools:**
-  - `load_model({ modelPath: string })`
+  - `list_models()`: Discovers available models (local models and cloud models with active credentials).
+  - `load_model({ modelPath: string })`: Loads a local GGUF model or an authorized cloud model (e.g. `jev`).
   - `set_system_prompt({ systemPrompt: string })`
   - `classify_documents({ folder: string, labels: string, force?: boolean, contextReuse?: "none"|"file"|"command" })`
   - `list_classifications({ folder: string })`
@@ -215,6 +223,7 @@ Launched with `sailkari --mcp`. Exposes:
   - `sailkari://system-prompt-contract`: Output contract guidelines and format specification.
 - **Prompts:**
   - `generate-system-prompt({ taxonomy: string })`: Produces a prompt complying with Sailkari's parser contract.
+- **Security Invariant:** MCP never exposes API key values, hashes, or credential mutation tools. API keys must be configured via the TUI or passed via environment variables (e.g. `TYPESAFE_API_KEY`).
 
 ---
 

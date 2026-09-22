@@ -6,6 +6,7 @@ export interface SailkariConfig {
   modelPath?: string;
   systemPromptPath?: string;
   commandHistory?: string[];
+  apiKeys?: Record<string, string>;
 }
 
 export function getConfigPath(): string {
@@ -19,6 +20,11 @@ export async function loadConfig(path = getConfigPath()): Promise<SailkariConfig
       ...(typeof parsed.modelPath === "string" ? { modelPath: parsed.modelPath } : {}),
       ...(typeof parsed.systemPromptPath === "string" ? { systemPromptPath: parsed.systemPromptPath } : {}),
       ...(Array.isArray(parsed.commandHistory) ? { commandHistory: parsed.commandHistory.filter((entry): entry is string => typeof entry === "string") } : {}),
+      ...(parsed.apiKeys && typeof parsed.apiKeys === "object" && !Array.isArray(parsed.apiKeys) ? {
+        apiKeys: Object.fromEntries(
+          Object.entries(parsed.apiKeys).filter(([k, v]) => typeof k === "string" && typeof v === "string")
+        ),
+      } : {}),
     };
   } catch {
     return {};

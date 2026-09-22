@@ -6,6 +6,10 @@ import { createLLMEngine, type EngineContext, type LLMEngine, type NativeLogCall
 import { DEFAULT_SYSTEM_PROMPT, inspectSystemPrompt, loadSystemPrompt } from "./prompt.js";
 import { summarizeEvaluation } from "./evaluation-metrics.js";
 import type { ProcessingResult } from "./types.js";
+import { getCloudModelDefinition, isCloudModel, listCloudModels, resolveApiKey } from "./api-keys.js";
+import { loadConfig } from "./config.js";
+import { JevCloudDriver } from "./jev-driver.js";
+import { OpenAICompatibleDriver } from "./openai-driver.js";
 
 export interface EvaluationOptions {
   folder: string;
@@ -42,12 +46,58 @@ export class SailkariApplication {
   }
 
   async loadModel(modelPath: string): Promise<string> {
-    const absolutePath = resolve(modelPath);
     await this.engine.dispose();
+
+    if (isCloudModel(modelPath)) {
+      const def = getCloudModelDefinition(modelPath)!;
+      const config = await loadConfig();
+      const resolved = resolveApiKey(def.provider, config);
+      if (!resolved) {
+        const envVar = def.provider === "typesafe" ? "TYPESAFE_API_KEY" : `${def.provider.toUpperCase()}_API_KEY`;
+        throw new Error(
+          `API key for provider '${def.provider}' is not configured. Set the ${envVar} environment variable or configure it in the Sailkari TUI using 'key set ${def.provider} <key>'.`
+        );
+      }
+
+      const driver = def.driverType === "jev"
+        ? new JevCloudDriver(resolved.key, { model: def.canonicalModel })
+        : new OpenAICompatibleDriver(resolved.key, { model: def.canonicalModel, endpoint: def.endpoint });
+
+      this.engine = createLLMEngine(this.nativeLogger ?? (() => {}), driver);
+      await this.engine.loadModel(modelPath);
+      this.modelPath = def.id;
+      return def.id;
+    }
+
+    const absolutePath = resolve(modelPath);
     this.engine = createLLMEngine(this.nativeLogger ?? (() => {}));
     await this.engine.loadModel(absolutePath);
     this.modelPath = absolutePath;
     return absolutePath;
+  }
+
+  async listAvailableModels(): Promise<{ id: string; type: "local" | "cloud"; provider?: string; available: boolean; description?: string }[]> {
+    const config = await loadConfig();
+    const cloudModels = listCloudModels(config).map((m) => ({
+      id: m.id,
+      type: "cloud" as const,
+      provider: m.provider,
+      available: m.available,
+      description: m.description,
+    }));
+
+    const result: { id: string; type: "local" | "cloud"; provider?: string; available: boolean; description?: string }[] = [];
+    if (this.modelPath && !isCloudModel(this.modelPath)) {
+      result.push({
+        id: this.modelPath,
+        type: "local",
+        available: true,
+        description: "Currently loaded local GGUF model",
+      });
+    }
+
+    result.push(...cloudModels);
+    return result;
   }
 
   async setSystemPrompt(prompt: string): Promise<{ warnings: string[] }> {

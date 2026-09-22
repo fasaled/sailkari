@@ -31,6 +31,46 @@ describe("parseCommand", () => {
     expect(() => parseCommand("model")).toThrow("Usage: model <path>");
   });
 
+  test("parses key management commands", () => {
+    expect(parseCommand("key set typesafe ts_my_key_123")).toEqual({
+      type: "key",
+      action: "set",
+      provider: "typesafe",
+      key: "ts_my_key_123",
+    });
+
+    expect(parseCommand("key get typesafe")).toEqual({
+      type: "key",
+      action: "get",
+      provider: "typesafe",
+    });
+
+    expect(parseCommand("key list")).toEqual({
+      type: "key",
+      action: "list",
+    });
+
+    expect(parseCommand("key remove typesafe")).toEqual({
+      type: "key",
+      action: "remove",
+      provider: "typesafe",
+    });
+
+    expect(parseCommand("key delete typesafe")).toEqual({
+      type: "key",
+      action: "remove",
+      provider: "typesafe",
+    });
+  });
+
+  test("rejects invalid key command syntax", () => {
+    expect(() => parseCommand("key")).toThrow("Usage: key");
+    expect(() => parseCommand("key set typesafe")).toThrow("Usage: key set");
+    expect(() => parseCommand("key get")).toThrow("Usage: key get");
+    expect(() => parseCommand("key remove")).toThrow("Usage: key remove");
+    expect(() => parseCommand("key unknown")).toThrow("Unknown key action: unknown");
+  });
+
   test("formats help as an aligned command table", () => {
     const lines = HELP_TEXT.split("\n");
     const descriptionColumn = lines[0]!.indexOf("DESCRIPTION");

@@ -1,6 +1,6 @@
 import type { Command } from "./command-parser.js";
 
-export type RunnableCommand = Exclude<Command, { type: "cancel" } | { type: "queue" }>;
+export type RunnableCommand = Exclude<Command, { type: "cancel" } | { type: "queue" } | { type: "key" }>;
 
 export interface QueuedCommand {
   id: number;

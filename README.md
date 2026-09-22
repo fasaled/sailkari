@@ -70,11 +70,14 @@ standard MCP tools, resources, and prompts.
 When launched with `sailkari --mcp`, Sailkari exposes a standard MCP server over stdio.
 Clients can discover and call the following tools:
 
-- `load_model`: load a GGUF model from disk
+- `list_models`: list available models (local models and cloud models with active credentials)
+- `load_model`: load a local GGUF model from disk or an authorized cloud model (e.g. `jev`)
 - `set_system_prompt`: set the classifier system prompt
 - `classify_documents`: classify a folder using a YAML taxonomy and benchmark settings
 - `list_classifications`: inspect stored labels for a folder
 - `remove_classifications`: clear stored labels for a folder
+
+> **Security guarantee:** The MCP server strictly forbids credential management. There are no tools to read, set, or delete API keys via MCP. External agents can inspect available model names (`list_models`) and invoke them (`load_model`), but secret keys are never exposed over JSON-RPC. Configure credentials beforehand via the TUI or pass them as environment variables (e.g., `TYPESAFE_API_KEY`).
 
 The server also exposes the following resources and prompts:
 
@@ -162,7 +165,7 @@ inference request.
 Enter these commands in the lower input panel:
 
 ```text
-model <path.gguf>                  Load and persist the inference model
+model <path.gguf|name>             Load GGUF or cloud model (e.g. jev)
 prompt <path|default>              Configure the system prompt
 classify <folder> <labels.yaml>   Classify a folder
 classify <folder> <labels.yaml> --force
@@ -170,6 +173,10 @@ classify <folder> <labels.yaml> --reuse-context-file
 classify <folder> <labels.yaml> --reuse-context-command
 list-tags <folder>                 List stored classifications
 remove-tags <folder>               Remove stored classifications
+key set <provider> <key>           Save API key for a cloud provider
+key get <provider>                 Show configured API key for provider
+key list                           List configured providers
+key remove <provider>              Remove API key for provider
 cancel                              Cancel the active operation
 queue                               List pending commands
 queue remove <position>             Remove a pending command
@@ -178,6 +185,51 @@ queue clear                         Remove all pending commands
 help                               Show command help
 quit                               Exit Sailkari
 ```
+
+## Cloud Models & API Keys
+
+Sailkari supports hybrid benchmarking comparing local GGUF models against cloud models:
+
+1. **System One Decision Models:** **TypeSafe Jev** (`jev`, `typesafe:jev-latest`), returning instant structured choices and probabilities without text generation.
+2. **OpenAI-Compatible LLMs:** Any provider adhering to the chat completions API, including **OpenAI** (`openai:gpt-4o-mini`, `openai:gpt-4o`), **Groq** (`groq:llama-3.3-70b-versatile`), or **OpenRouter** (`openrouter:<model>`).
+
+### System Prompts in Cloud Models
+
+- **For generative LLMs (OpenAI, Groq, OpenRouter):** The standard Sailkari system prompt (`DEFAULT_SYSTEM_PROMPT` or custom) is passed as `role: "system"` with `temperature: 0`. The strict output contract guarantees clean, single-label responses.
+- **For Jev (System One):** Jev evaluates native `choice` questions against criteria. Domain instructions from your configured system prompt are passed into Jev's evaluation instructions, while conversational formatting boilerplate is stripped automatically.
+
+### Managing API keys in the TUI
+
+Credentials can be saved and managed directly in the TUI, persisted in `~/.config/sailkari/config.json`:
+
+```text
+key set typesafe ts_live_your_key_here
+key set openai sk-proj-...
+key set groq gsk-...
+key list
+key get typesafe
+model jev
+classify examples/documents examples/labels.yaml
+model openai:gpt-4o-mini
+classify examples/documents examples/labels.yaml --force
+```
+
+### Passing API keys via environment variables
+
+For automated runs and MCP server setups (e.g., in Claude Desktop or cursor configuration), API keys can be passed as environment variables without writing them to disk:
+
+```bash
+# Specific provider variables
+TYPESAFE_API_KEY="ts_live_..." sailkari --mcp
+OPENAI_API_KEY="sk-..." sailkari --mcp
+GROQ_API_KEY="gsk-..." sailkari --mcp
+
+# Or Sailkari prefixed variables
+SAILKARI_KEY_TYPESAFE="ts_live_..." sailkari --mcp
+SAILKARI_KEY_OPENAI="sk-..." sailkari --mcp
+```
+
+Environment variables always take precedence over keys saved in `config.json`. When an API key is present in either the environment or configuration, the corresponding cloud models become discoverable via `list_models` and selectable via `load_model({ modelPath: "..." })`.
 
 The upper panel displays benchmark tables, summaries, warnings, and errors. Model and system
 prompt configuration is saved in `~/.config/sailkari/config.json`. Use Tab for command and

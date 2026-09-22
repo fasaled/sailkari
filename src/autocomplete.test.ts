@@ -41,4 +41,20 @@ describe("completeInput", () => {
     expect(completeInput("classify documents/ tax")).toEqual(["taxonomies/"]);
     expect(completeInput("classify documents/ taxonomies/")).toEqual(["taxonomies/categories.yaml"]);
   });
+
+  test("completes key subcommands and providers", () => {
+    expect(completeInput("k")).toEqual(["key"]);
+    expect(completeInput("key ")).toEqual(["set", "get", "list", "remove"]);
+    expect(completeInput("key s")).toEqual(["set"]);
+    expect(completeInput("key set ")).toEqual(["typesafe", "jev", "openai", "groq", "openrouter"]);
+    expect(completeInput("key get type")).toEqual(["typesafe"]);
+    expect(completeInput("key remove j")).toEqual(["jev"]);
+  });
+
+  test("completes cloud model names for model command", () => {
+    expect(completeInput("model je")).toEqual(["jev"]);
+    expect(completeInput("model type")).toEqual(["typesafe:jev", "typesafe:jev-latest"]);
+    expect(completeInput("model open")).toEqual(["openai:gpt-4o-mini", "openai:gpt-4o"]);
+    expect(completeInput("model groq:")).toEqual(["groq:llama-3.3-70b-versatile", "groq:llama-3.1-8b-instant"]);
+  });
 });

@@ -8,6 +8,14 @@ import { HELP_TEXT, parseCommand, type Command } from "./command-parser.js";
 import { applyCompletion, completeInput } from "./autocomplete.js";
 import { CommandQueue, type QueuedCommand, type RunnableCommand } from "./command-queue.js";
 import { CommandHistory } from "./command-history.js";
+import {
+  getApiKeysStatus,
+  isCloudModel,
+  normalizeProvider,
+  removeApiKeyFromConfig,
+  resolveApiKey,
+  setApiKeyInConfig,
+} from "./api-keys.js";
 
 interface EventLine {
   id: number;
@@ -48,7 +56,7 @@ export function App(): React.ReactElement {
   useEffect(() => {
     const worker = new Worker(new URL("./operation-worker.js", import.meta.url));
     workerRef.current = worker;
-    worker.on("message", (message: { type: string; id: number; text?: string; tone?: EventLine["tone"]; level?: string; modelPath?: string; prompt?: string; systemPromptPath?: string | null; warnings?: string[] }) => {
+    worker.on("message", (message: { type: string; id: number; text?: string; tone?: EventLine["tone"]; level?: string; modelPath?: string; isCloud?: boolean; prompt?: string; systemPromptPath?: string | null; warnings?: string[] }) => {
       if (message.type === "event") addEvent(message.text!, message.tone);
       if (message.type === "native-log") addEvent(`[llama.cpp] ${message.text!}`, message.level === "error" || message.level === "fatal" ? "error" : "warning");
       if (message.type === "model-loaded") {
@@ -57,7 +65,7 @@ export function App(): React.ReactElement {
           void saveConfig(next);
           return next;
         });
-        addEvent("Model loaded and configuration saved.", "success");
+        addEvent(message.isCloud ? `Cloud model '${message.modelPath}' ready and configuration saved.` : "Model loaded and configuration saved.", "success");
       }
       if (message.type === "prompt-loaded") {
         for (const warning of message.warnings ?? []) addEvent(`Warning: ${warning}`, "muted");
@@ -200,6 +208,40 @@ export function App(): React.ReactElement {
         const active = activeCommandRef.current;
         if (active) workerRef.current?.postMessage({ type: "cancel", id: active.id });
         else addEvent("No active operation to cancel.", "muted");
+      } else if (command.type === "key") {
+        if (command.action === "set") {
+          const next = setApiKeyInConfig(config, command.provider, command.key);
+          setConfig(next);
+          void saveConfig(next);
+          addEvent(`API key saved for provider '${normalizeProvider(command.provider)}'.`, "success");
+        } else if (command.action === "get") {
+          const resolved = resolveApiKey(command.provider, config);
+          if (resolved) {
+            addEvent(`${normalizeProvider(command.provider)}: ${resolved.key} [source: ${resolved.source}]`, "muted");
+          } else {
+            addEvent(`No API key configured for provider '${command.provider}'.`, "warning");
+          }
+        } else if (command.action === "list") {
+          const statuses = getApiKeysStatus(config);
+          const configured = statuses.filter((s) => s.configured);
+          if (configured.length === 0) {
+            addEvent("No API keys configured. Set one with `key set <provider> <key>` or environment variable.", "muted");
+          } else {
+            addEvent(`Configured API keys (${configured.length}):`, "muted");
+            for (const s of configured) {
+              addEvent(`  ${s.provider}: ${s.maskedKey} [source: ${s.source}]`, "muted");
+            }
+          }
+        } else if (command.action === "remove") {
+          const { config: next, removed } = removeApiKeyFromConfig(config, command.provider);
+          if (removed) {
+            setConfig(next);
+            void saveConfig(next);
+            addEvent(`API key removed for provider '${normalizeProvider(command.provider)}'.`, "success");
+          } else {
+            addEvent(`No stored API key found in configuration file for provider '${command.provider}'.`, "muted");
+          }
+        }
       } else if (command.type === "queue") {
         if (command.action === "show") {
           const entries = commandQueueRef.current.entries();
@@ -246,7 +288,7 @@ export function App(): React.ReactElement {
         </Box>
         <Text color="gray" wrap="truncate-end">{suggestions.length > 0 ? suggestions.join("  ") : " "}</Text>
         <Text dimColor wrap="truncate-end">cwd: {process.cwd()}</Text>
-        <Text dimColor wrap="truncate-end">model: {config.modelPath ?? "not configured"} | prompt: {config.systemPromptPath ?? "default"}</Text>
+        <Text dimColor wrap="truncate-end">model: {config.modelPath ? `${config.modelPath}${isCloudModel(config.modelPath) ? " (cloud)" : ""}` : "not configured"} | prompt: {config.systemPromptPath ?? "default"}</Text>
         <Text dimColor wrap="truncate-end">active: {activeTask ?? "idle"}</Text>
         <Text color="yellow" wrap="truncate-end">queue: {queue.length ? queue.map((entry, index) => `${index + 1}. ${entry.input}`).join(" | ") : "empty"}</Text>
         <Box>

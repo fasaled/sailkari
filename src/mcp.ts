@@ -61,9 +61,17 @@ export function createMcpServer(state = createState()): McpServer {
     }),
   );
 
+  server.registerTool("list_models", {
+    description: "List available models for evaluation, including local models and cloud models with configured credentials.",
+    inputSchema: {},
+  }, async () => {
+    const models = await state.application.listAvailableModels();
+    return jsonResult({ models });
+  });
+
   server.registerTool("load_model", {
-    description: "Load an instruction-tuned GGUF model for subsequent Sailkari evaluations.",
-    inputSchema: { modelPath: z.string().describe("Path to the GGUF model") },
+    description: "Load an instruction-tuned GGUF model path or an authorized cloud model (e.g. 'jev') for subsequent evaluations.",
+    inputSchema: { modelPath: z.string().describe("Path to the local GGUF model or name of an authorized cloud model (e.g. 'jev')") },
   }, async ({ modelPath }) => {
     const loadedModelPath = await state.application.loadModel(modelPath);
     return jsonResult({ modelPath: loadedModelPath, loaded: true });
@@ -78,7 +86,7 @@ export function createMcpServer(state = createState()): McpServer {
   });
 
   server.registerTool("classify_documents", {
-    description: "Evaluate text documents with the loaded GGUF model and return per-file and aggregate benchmark metrics.",
+    description: "Evaluate text documents with the loaded local or cloud model and return per-file and aggregate benchmark metrics.",
     inputSchema: {
       folder: z.string().describe("Folder containing documents to evaluate"),
       labels: z.string().describe("YAML label taxonomy path"),

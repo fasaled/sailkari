@@ -4,6 +4,10 @@ export type Command =
   | { type: "classify"; folder: string; labels: string; force: boolean; contextReuse: "none" | "file" | "command" }
   | { type: "list-tags"; folder: string }
   | { type: "remove-tags"; folder: string }
+  | { type: "key"; action: "set"; provider: string; key: string }
+  | { type: "key"; action: "get"; provider: string }
+  | { type: "key"; action: "list" }
+  | { type: "key"; action: "remove"; provider: string }
   | { type: "cancel" }
   | { type: "queue"; action: "show" | "clear" | "remove" | "move"; position?: number; destination?: number }
   | { type: "help" }
@@ -54,6 +58,34 @@ export function parseCommand(input: string): Command {
     case "remove-tags":
       requireArgs(name, args, 1);
       return { type: "remove-tags", folder: args[0]! };
+    case "key": {
+      if (args.length === 0) {
+        throw new Error("Usage: key [set <provider> <api_key> | get <provider> | list | remove <provider>]");
+      }
+      const sub = args[0]!.toLowerCase();
+      if (sub === "list") {
+        return { type: "key", action: "list" };
+      }
+      if (sub === "set") {
+        if (args.length < 3) {
+          throw new Error("Usage: key set <provider> <api_key>");
+        }
+        return { type: "key", action: "set", provider: args[1]!, key: args[2]! };
+      }
+      if (sub === "get") {
+        if (args.length < 2) {
+          throw new Error("Usage: key get <provider>");
+        }
+        return { type: "key", action: "get", provider: args[1]! };
+      }
+      if (sub === "remove" || sub === "delete") {
+        if (args.length < 2) {
+          throw new Error("Usage: key remove <provider>");
+        }
+        return { type: "key", action: "remove", provider: args[1]! };
+      }
+      throw new Error(`Unknown key action: ${args[0]}. Use set, get, list, or remove.`);
+    }
     case "cancel": return { type: "cancel" };
     case "queue": {
       if (args.length === 0) return { type: "queue", action: "show" };
@@ -76,7 +108,7 @@ export function parseCommand(input: string): Command {
 }
 
 const HELP_ENTRIES = [
-  ["model <path.gguf>", "Load and save the model"],
+  ["model <path.gguf|name>", "Load GGUF or cloud model (e.g. jev, openai:gpt-4o-mini)"],
   ["prompt <path|default>", "Configure the system prompt"],
   ["classify <folder> <labels.yaml>", "Classify a folder"],
   ["classify <folder> <labels.yaml> --force", "Reclassify every file"],
@@ -84,6 +116,10 @@ const HELP_ENTRIES = [
   ["classify <folder> <labels.yaml> --reuse-context-command", "Reuse context for the full command"],
   ["list-tags <folder>", "List stored classifications"],
   ["remove-tags <folder>", "Remove stored classifications"],
+  ["key set <provider> <key>", "Save API key for a cloud provider (e.g. typesafe, openai, groq)"],
+  ["key get <provider>", "Show configured API key for provider"],
+  ["key list", "List configured providers"],
+  ["key remove <provider>", "Remove API key for provider"],
   ["cancel", "Cancel the active operation"],
   ["queue", "List pending commands"],
   ["queue remove <n>", "Remove a pending command"],

@@ -3,6 +3,7 @@ import { basename, resolve } from "node:path";
 import { SailkariApplication } from "./application.js";
 import type { RunnableCommand } from "./command-queue.js";
 import { formatEvaluationSummaryTable, formatEvaluationTableHeader, formatEvaluationTableRow, summarizeEvaluation } from "./evaluation-metrics.js";
+import { isCloudModel } from "./api-keys.js";
 
 interface RunMessage {
   type: "run";
@@ -33,11 +34,12 @@ async function run({ id, command, systemPrompt }: RunMessage): Promise<void> {
 
   try {
     if (command.type === "model") {
-      const modelPath = resolve(command.path);
-      post({ type: "event", id, text: `Loading model: ${modelPath}` });
-      await application.loadModel(modelPath);
+      const isCloud = isCloudModel(command.path);
+      const modelTarget = isCloud ? command.path : resolve(command.path);
+      post({ type: "event", id, text: `Loading model: ${modelTarget}${isCloud ? " (cloud)" : ""}` });
+      const loaded = await application.loadModel(modelTarget);
       signal.throwIfAborted();
-      post({ type: "model-loaded", id, modelPath });
+      post({ type: "model-loaded", id, modelPath: loaded, isCloud });
     } else if (command.type === "prompt") {
       const prompt = await application.loadSystemPrompt(command.path);
       signal.throwIfAborted();

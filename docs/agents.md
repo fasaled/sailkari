@@ -26,7 +26,7 @@ bun run typecheck && bun test && bun run build
 - **Node >= 20** is the distribution runtime. Published package has `engines: { "node": ">=20.0.0" }`.
 - Build emits to `dist/` (`bun build ... --target=node --packages=external --splitting`).
 - **`node-llama-cpp`** (v3) provides native bindings (Metal/CUDA/CPU) via platform-specific npm packages (`@node-llama-cpp/*`). Never invoke external `llama-server` or compile C++ manually.
-- **Strictly local-first**: No external network requests during classification or evaluation.
+- **Local-first with hybrid cloud benchmarking**: Local GGUF evaluation remains strictly offline with zero external network requests. Cloud decision models (such as TypeSafe Jev) make HTTPS calls to their official API only when explicitly selected by the user or agent.
 
 ## Architecture
 
@@ -36,7 +36,9 @@ src/index.tsx (CLI entry router)
   └── [default]   → src/tui.tsx (Ink alternate-screen TUI)
                       └── (Worker Thread) → src/operation-worker.ts
                                               └── src/application.ts (SailkariApplication core)
-                                                    ├── src/llm-engine.ts (node-llama-cpp)
+                                                    ├── src/llm-engine.ts (node-llama-cpp & cloud drivers)
+                                                    ├── src/jev-driver.ts (TypeSafe Jev System One)
+                                                    ├── src/api-keys.ts (credential resolution & catalog)
                                                     ├── src/classifier.ts (chunking + voting)
                                                     └── src/classification-store.ts (.sailkari/results.json)
 ```
@@ -58,6 +60,9 @@ src/index.tsx (CLI entry router)
 | MCP Server | `src/mcp.ts` | Tools (`load_model`, `classify_documents`, etc.), prompt template, contract resource |
 | Application Core | `src/application.ts` | High-level operations (`loadModel`, `evaluate`, `listClassifications`) |
 | LLM Driver | `src/llm-engine.ts` | `node-llama-cpp` adapter, context lifecycle, context-reuse scopes |
+| Jev Cloud Driver | `src/jev-driver.ts` | TypeSafe Jev System One decision model integration via native `fetch` |
+| OpenAI Cloud Driver | `src/openai-driver.ts` | OpenAI-compatible (/v1/chat/completions) cloud model integration |
+| API Keys & Catalog | `src/api-keys.ts` | Credential resolution (env & config), key masking, and cloud models catalog |
 | Classifier Pipeline | `src/classifier.ts` | Chunking large files, majority voting, caching bypass with `--force` |
 | Classification Store | `src/classification-store.ts` | Local `.sailkari/results.json` reader/writer |
 | File Scanner | `src/file-scanner.ts` | Recursive plain-text file scanner |
@@ -86,7 +91,8 @@ src/index.tsx (CLI entry router)
 - **Do not** run model loading or token generation on the main UI thread.
 - **Do not** start TUI and MCP concurrently in the same process.
 - **Do not** commit GGUF models, binaries, `.tgz` tarballs, or `.DS_Store` files.
-- **Do not** make network requests during classification or evaluation.
+- **Do not** make network requests during local GGUF classification or evaluation.
+- **Do not** expose API keys, secrets, or credential modification tools over MCP.
 - **Do not** use `eval` or execute arbitrary strings as code.
 
 ## Conventions
