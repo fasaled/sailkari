@@ -115,8 +115,8 @@ Install from source:
 ```bash
 git clone https://github.com/fasaled/local-ai-classifier.git
 cd local-ai-classifier
-npm install
-npm run build
+bun install
+bun run build
 node dist/index.js
 ```
 
@@ -234,16 +234,16 @@ command.
 ## Development
 
 ```bash
-npm install
-npm run typecheck
-npm test
-npm run build
+bun install
+bun run typecheck
+bun test
+bun run build
 ```
 
 Run model-dependent tests explicitly:
 
 ```bash
-CLASSIFIER_MODEL=/absolute/path/to/model.gguf npm run test:e2e
+CLASSIFIER_MODEL=/absolute/path/to/model.gguf bun run test:e2e
 ```
 
 Without `CLASSIFIER_MODEL` (and without a GGUF directly in `models/`), the e2e suite is

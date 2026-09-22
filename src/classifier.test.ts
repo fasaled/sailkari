@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test, mock } from "bun:test";
 import { ClassificationStore } from "./classification-store.js";
 import { processFile } from "./classifier.js";
 import type { LLMEngine } from "./llm-engine.js";
@@ -27,11 +27,11 @@ describe("processFile", () => {
     const store = new ClassificationStore(folder);
     store.setLabels(filePath, []);
     await writeFile(filePath, "Account statement");
-    const engine = { classify: vi.fn(async () => ({ labels: ["banking"] })) } as unknown as LLMEngine;
+    const engine = { classify: mock(async () => ({ labels: ["banking"] })) } as unknown as LLMEngine;
 
     try {
       const result = await processFile(filePath, [{ name: "banking", description: "financial document" }], false, engine, store);
-      expect(engine.classify).toHaveBeenCalledOnce();
+      expect(engine.classify).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({ status: "ok", labels: ["banking"] });
     } finally {
       await rm(folder, { recursive: true, force: true });

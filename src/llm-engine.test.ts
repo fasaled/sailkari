@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test, mock } from "bun:test";
 import {
   LLMEngine,
   type EngineContext,
@@ -7,23 +7,24 @@ import {
 } from "./llm-engine.js";
 
 function createDriver(response = "banking") {
+  const generate = mock(async ({ onToken }: { onToken?: (chunk: string) => void } = {}) => {
+    onToken?.(response);
+    return response;
+  });
   const context: EngineContext = {
-    generate: vi.fn(async ({ onToken }) => {
-      onToken?.(response);
-      return response;
-    }),
-    clearHistory: vi.fn(async () => {}),
-    dispose: vi.fn(async () => {}),
+    generate,
+    clearHistory: mock(async () => {}),
+    dispose: mock(async () => {}),
   };
   const model: EngineModel = {
-    createContext: vi.fn(async () => context),
-    dispose: vi.fn(async () => {}),
+    createContext: mock(async () => context),
+    dispose: mock(async () => {}),
   };
   const driver: EngineDriver = {
-    loadModel: vi.fn(async () => model),
-    dispose: vi.fn(async () => {}),
+    loadModel: mock(async () => model),
+    dispose: mock(async () => {}),
   };
-  return { driver, model, context };
+  return { driver, model, context, generate };
 }
 
 describe("LLMEngine", () => {
@@ -47,28 +48,28 @@ describe("LLMEngine", () => {
     });
 
     expect(driver.loadModel).toHaveBeenCalledWith("/models/test.gguf");
-    expect(model.createContext).toHaveBeenCalledOnce();
+    expect(model.createContext).toHaveBeenCalledTimes(1);
     expect(result).toBe("pets");
     expect(chunks).toEqual(["pets"]);
-    expect(context.dispose).toHaveBeenCalledOnce();
+    expect(context.dispose).toHaveBeenCalledTimes(1);
   });
 
   test("releases a context when generation fails", async () => {
-    const { driver, context } = createDriver();
-    vi.mocked(context.generate).mockRejectedValueOnce(new Error("generation failed"));
+    const { driver, context, generate } = createDriver();
+    generate.mockRejectedValueOnce(new Error("generation failed"));
     const engine = new LLMEngine(driver);
     await engine.loadModel("/models/test.gguf");
 
     await expect(
       engine.generate({ systemPrompt: "Classify.", prompt: "document" })
     ).rejects.toThrow("generation failed");
-    expect(context.dispose).toHaveBeenCalledOnce();
+    expect(context.dispose).toHaveBeenCalledTimes(1);
   });
 
   test("classifies parsed output and reports progress", async () => {
     const { driver } = createDriver("BANKING");
     const engine = new LLMEngine(driver);
-    const progress = vi.fn();
+    const progress = mock();
     await engine.loadModel("/models/test.gguf");
 
     const result = await engine.classify(
@@ -98,10 +99,10 @@ describe("LLMEngine", () => {
     );
     await reusableContext.dispose();
 
-    expect(model.createContext).toHaveBeenCalledOnce();
+    expect(model.createContext).toHaveBeenCalledTimes(1);
     expect(context.generate).toHaveBeenCalledTimes(2);
-    expect(context.clearHistory).toHaveBeenCalledOnce();
-    expect(context.dispose).toHaveBeenCalledOnce();
+    expect(context.clearHistory).toHaveBeenCalledTimes(1);
+    expect(context.dispose).toHaveBeenCalledTimes(1);
   });
 
   test("disposes the model and native driver exactly once", async () => {
@@ -112,8 +113,8 @@ describe("LLMEngine", () => {
     await engine.dispose();
     await engine.dispose();
 
-    expect(model.dispose).toHaveBeenCalledOnce();
-    expect(driver.dispose).toHaveBeenCalledOnce();
+    expect(model.dispose).toHaveBeenCalledTimes(1);
+    expect(driver.dispose).toHaveBeenCalledTimes(1);
   });
 
   test("rejects loading a second model without disposal", async () => {

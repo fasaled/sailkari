@@ -1,4 +1,4 @@
-import { test, expect, describe } from "vitest";
+import { test, expect, describe } from "bun:test";
 import { parseResponse, selectLabelByMajority } from "./parser.js";
 import type { Label } from "./types.js";
 

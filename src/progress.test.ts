@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach, beforeEach } from "vitest";
+import { test, expect, describe, afterEach, beforeEach } from "bun:test";
 import { startProgress, updateProgress, finishProgress, clearProgress } from "./progress.js";
 
 describe("progress bar", () => {

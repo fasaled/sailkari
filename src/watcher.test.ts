@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach, beforeEach } from "vitest";
+import { test, expect, describe, afterEach, beforeEach } from "bun:test";
 import { watchFolder } from "./watcher.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";

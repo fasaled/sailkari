@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { test, expect, describe } from "vitest";
+import { test, expect, describe } from "bun:test";
 import {
   DEFAULT_SYSTEM_PROMPT,
   buildChatMessages,

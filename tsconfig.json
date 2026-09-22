@@ -5,7 +5,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "moduleDetection": "force",
-    "types": ["node"],
+    "types": ["node", "bun"],
     "verbatimModuleSyntax": true,
     "strict": true,
     "skipLibCheck": true,

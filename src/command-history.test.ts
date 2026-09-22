@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "bun:test";
 import { CommandHistory } from "./command-history.js";
 
 describe("CommandHistory", () => {

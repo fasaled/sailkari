@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "bun:test";
 import { formatBytes, formatEvaluationSummaryTable, formatEvaluationTableHeader, formatEvaluationTableRow, formatFileMetrics, summarizeEvaluation } from "./evaluation-metrics.js";
 
 describe("evaluation metrics", () => {
