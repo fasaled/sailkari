@@ -25,7 +25,7 @@ import {
 interface EventLine {
   id: number;
   text: string;
-  tone?: "error" | "success" | "warning" | "muted";
+  tone?: "error" | "success" | "warning" | "muted" | "header" | "highlight" | "info";
 }
 
 const COMMAND_PANEL_HEIGHT = 9;
@@ -342,11 +342,39 @@ export function App(): React.ReactElement {
           <Text bold color="cyan">SAILKARI</Text>
           <Text dimColor>activity {activityScroll > 0 ? `(page ${Math.ceil(activityScroll / activityLines)})` : "(latest)"}</Text>
         </Box>
-        {events.slice(firstVisibleEvent, lastVisibleEvent).map((event, index) => (
-          <Text key={event.id} color={event.tone === "error" ? "red" : event.tone === "success" ? "green" : event.tone === "warning" ? "yellow" : event.tone === "muted" ? "gray" : undefined}>
-            {event.tone === "error" ? "! " : event.tone === "success" ? "✓ " : "  "}{event.text}
-          </Text>
-        ))}
+        {events.slice(firstVisibleEvent, lastVisibleEvent).map((event) => {
+          let color: string | undefined;
+          let bold = false;
+          let prefix = "  ";
+
+          if (event.tone === "error") {
+            color = "red";
+            prefix = "! ";
+            bold = true;
+          } else if (event.tone === "success") {
+            color = "green";
+            prefix = "✓ ";
+          } else if (event.tone === "warning") {
+            color = "yellow";
+            prefix = "! ";
+          } else if (event.tone === "header") {
+            color = "white";
+            bold = true;
+          } else if (event.tone === "highlight") {
+            color = "cyan";
+            bold = true;
+          } else if (event.tone === "info") {
+            color = "cyan";
+          } else if (event.tone === "muted") {
+            color = "gray";
+          }
+
+          return (
+            <Text key={event.id} color={color} bold={bold}>
+              {prefix}{event.text}
+            </Text>
+          );
+        })}
       </Box>
       <Box flexDirection="column" height={COMMAND_PANEL_HEIGHT} borderStyle="round" borderColor="cyan" paddingX={1} marginTop={PANEL_GAP}>
         <Box justifyContent="space-between">

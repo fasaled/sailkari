@@ -55,16 +55,27 @@ async function run({ id, command, systemPrompt }: RunMessage): Promise<void> {
           const targetStr = application.loadedModelPath ? ` [model: ${application.loadedModelPath}]` : "";
           const isCloud = application.loadedModelPath ? isCloudModel(application.loadedModelPath) : false;
           const effectiveConcurrency = command.concurrency ?? (isCloud ? 4 : 1);
-          post({ type: "event", id, text: `Benchmarking ${fileCount} files in ${folder}${targetStr} (concurrency: ${effectiveConcurrency})` });
-          for (const line of formatEvaluationTableHeader()) post({ type: "event", id, text: line, tone: "muted" });
+          post({ type: "event", id, text: `Benchmarking ${fileCount} files in ${folder}${targetStr} (concurrency: ${effectiveConcurrency})`, tone: "highlight" });
+          const [header, divider] = formatEvaluationTableHeader();
+          post({ type: "event", id, text: header, tone: "header" });
+          post({ type: "event", id, text: divider, tone: "muted" });
         },
         onProgress: (filePath, current, total, message) => post({ type: "progress", id, text: `${basename(filePath)}: ${message} (${current}/${total})` }),
         onResult: (result) => {
           const name = basename(result.filePath);
-          post({ type: "event", id, text: formatEvaluationTableRow(name, result), tone: result.status === "ok" ? "success" : result.status === "skip" ? "muted" : undefined });
+          const tone = result.status === "ok" ? "success" : result.status === "skip" ? "muted" : "warning";
+          post({ type: "event", id, text: formatEvaluationTableRow(name, result), tone });
         },
       });
-      for (const line of formatEvaluationSummaryTable(evaluation.summary)) post({ type: "event", id, text: line, tone: "success" });
+      const summaryLines = formatEvaluationSummaryTable(evaluation.summary);
+      if (summaryLines.length > 0) {
+        post({ type: "event", id, text: summaryLines[0]!, tone: "highlight" });
+        post({ type: "event", id, text: summaryLines[1]!, tone: "header" });
+        post({ type: "event", id, text: summaryLines[2]!, tone: "muted" });
+        for (let i = 3; i < summaryLines.length; i++) {
+          post({ type: "event", id, text: summaryLines[i]!, tone: undefined });
+        }
+      }
     } else if (command.type === "list-tags" || command.type === "remove-tags") {
       const entries = application.listClassifications(command.folder);
       if (command.type === "remove-tags") application.removeClassifications(command.folder);
