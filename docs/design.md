@@ -104,19 +104,18 @@ Sailkari uses `node-llama-cpp` (v3) to execute local GGUF models directly in-pro
 - `SYSTEM_RESERVE`: 1,024 tokens reserved for prompt formatting and instructions.
 - `EFFECTIVE_LIMIT`: 31,744 tokens available for document text and chunking.
 
-### 4.2 Context Reuse Policies
-Sailkari introduces three distinct context-management policies via `--reuse-context-file` and `--reuse-context-command`:
+### 4.2 Concurrency and Connection Pooling
+Sailkari features an adaptive concurrency architecture:
 
-1. **`none` (Default):**
-   - For local GGUFs: a fresh `LlamaContext` is created for every model call and disposed immediately upon completion.
-   - For cloud models: stateless HTTP call per chunk/file.
-   - Provides absolute isolation, preventing any memory retention or attention pollution between chunks or documents.
-2. **`file` (`--reuse-context-file`):**
-   - For local GGUFs: a single `LlamaContext` is shared across all chunks of a single document, then disposed. Between chunks, conversation history is explicitly cleared (`clearHistory()`).
-   - For cloud models: stateless context where `clearHistory()` and `dispose()` are safe no-ops.
-3. **`command` (`--reuse-context-command`):**
-   - For local GGUFs: a single `LlamaContext` is retained across the entire batch of files evaluated in the command. `clearHistory()` is called between consecutive files and chunks.
-   - For cloud models: stateless context across all calls.
+1. **HTTP Keep-Alive Connection Pooling (Cloud Models):**
+   - Both `JevCloudDriver` and `OpenAICompatibleDriver` maintain persistent HTTP connections (`Connection: keep-alive`).
+   - Sockets and TLS sessions are reused across sequential and parallel requests, eliminating round-trip handshake overhead (~200–500ms per file).
+2. **Adaptive Concurrency:**
+   - **Cloud Models:** Concurrency defaults to **4 parallel workers**, allowing multiple HTTP requests to be handled concurrently without saturating the remote gateway.
+   - **Local GGUF Models:** Concurrency defaults to **1** to prevent VRAM memory exhaustion and GPU/CPU thread contention on consumer hardware.
+   - **User Override:** Users can explicitly specify `--concurrency <N>` (or `-c <N>`) in the TUI/CLI or via MCP's `classify_documents` tool to parallelize any batch. Each parallel local worker instantiates its own isolated `LlamaContext`.
+3. **Stateless Isolation:**
+   - Every inference evaluation is strictly isolated and stateless. Context history is not leaked across documents.
 
 ---
 

@@ -254,3 +254,19 @@ The architectural trajectory follows a coherent progression: transitioning from 
 5. **Least-privilege MCP discovery:** MCP's `list_models` only advertises models that the host has explicitly pre-authorized via `<NAME>_MODELS` or TUI configuration, ensuring clients cannot guess or access unapproved providers.
 
 **Consequences:** Completely modular architecture where arbitrary third-party or local inference endpoints can be plugged in instantly without codebase modifications, with a clear, predictable configuration contract.
+
+---
+
+## D21 — HTTP Keep-Alive, Adaptive Concurrency, and Context Isolation
+
+**Context:** Benchmarking remote cloud models (such as Jev via OpenCode Zen or OpenAI) over strictly sequential HTTP connections resulted in excessive latency: each document suffered full TCP 3-way handshakes and TLS renegotiation round-trips (~300–800ms overhead per file). Additionally, legacy experimental context reuse modes (`--reuse-context-file` and `--reuse-context-command`) added stateful complexity with negligible benefit for classification workloads.
+
+**Decision:**
+1. **HTTP Keep-Alive:** Send `Connection: keep-alive` in `JevCloudDriver` and `OpenAICompatibleDriver` to reuse underlying TCP/TLS sockets across calls, slashing per-request overhead.
+2. **Adaptive Concurrency Pool:** Implement an asynchronous worker pool with configurable concurrency (`--concurrency <N>` / `-c <N>`):
+   - Defaults to **4** parallel workers for cloud models (I/O bound).
+   - Defaults to **1** for local GGUF models to protect GPU VRAM and avoid Metal/CPU thread thrashing, but allows explicit user overrides.
+3. **Elimination of Context Reuse:** Deprecate stateful context retention flags (`--reuse-context-file`, `--reuse-context-command`). Every inference is strictly isolated and stateless.
+4. **Telemetry Feedback:** Surface the applied target model, provider, and effective concurrency in both the benchmark start event and the final evaluation summary table.
+
+**Consequences:** Substantially faster cloud evaluations (reducing total batch latency from over a minute to a few seconds) while maintaining determinism, clean memory boundaries, and full hardware safety for local models.
