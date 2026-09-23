@@ -7,6 +7,8 @@ const STORE_VERSION = 1;
 
 interface StoredResult {
   labels: string[];
+  model?: string;
+  provider?: string;
 }
 
 interface StoredResultsFile {
@@ -48,10 +50,25 @@ export class ClassificationStore {
     return labels;
   }
 
-  setLabels(filePath: string, labels: string[]): void {
+  setLabels(filePath: string, labels: string[], metadata?: { model?: string; provider?: string }): void {
     this.load();
-    this.results.files[this.keyFor(filePath)] = { labels: [...labels] };
+    this.results.files[this.keyFor(filePath)] = {
+      labels: [...labels],
+      ...(metadata?.model ? { model: metadata.model } : {}),
+      ...(metadata?.provider ? { provider: metadata.provider } : {}),
+    };
     this.save();
+  }
+
+  getEntry(filePath: string): StoredResult | undefined {
+    this.load();
+    const entry = this.results.files[this.keyFor(filePath)];
+    if (!entry) return undefined;
+    return {
+      labels: [...entry.labels],
+      model: entry.model,
+      provider: entry.provider,
+    };
   }
 
   remove(filePath: string): void {
@@ -60,11 +77,13 @@ export class ClassificationStore {
     this.save();
   }
 
-  entries(): { filePath: string; labels: string[] }[] {
+  entries(): { filePath: string; labels: string[]; model?: string; provider?: string }[] {
     this.load();
     return Object.entries(this.results.files).map(([key, value]) => ({
       filePath: join(this.root, key.split("/").join(sep)),
       labels: [...value.labels],
+      model: value.model,
+      provider: value.provider,
     }));
   }
 

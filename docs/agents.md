@@ -62,7 +62,7 @@ src/index.tsx (CLI entry router)
 | LLM Driver | `src/llm-engine.ts` | `node-llama-cpp` adapter, context lifecycle, context-reuse scopes |
 | Jev Cloud Driver | `src/jev-driver.ts` | TypeSafe Jev System One decision model integration via native `fetch` |
 | OpenAI Cloud Driver | `src/openai-driver.ts` | OpenAI-compatible (/v1/chat/completions) cloud model integration |
-| API Keys & Catalog | `src/api-keys.ts` | Credential resolution (env & config), key masking, and cloud models catalog |
+| API Keys, Providers & Catalog | `src/api-keys.ts` | Dynamic provider & credential resolution (env & config), key masking, and cloud models catalog |
 | Classifier Pipeline | `src/classifier.ts` | Chunking large files, majority voting, caching bypass with `--force` |
 | Classification Store | `src/classification-store.ts` | Local `.sailkari/results.json` reader/writer |
 | File Scanner | `src/file-scanner.ts` | Recursive plain-text file scanner |

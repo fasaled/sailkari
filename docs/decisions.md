@@ -235,3 +235,22 @@ The architectural trajectory follows a coherent progression: transitioning from 
 4. Apply the principle of least privilege to MCP: agents can discover authorized models (`list_models`) and load them (`load_model`), but MCP never exposes tools to mutate or read secret keys.
 
 **Consequences:** Sailkari evolves from a purely local GGUF executor into a flexible hybrid benchmarking harness capable of comparing on-device GGUF models against both cloud decision APIs and generative LLMs under a single evaluation protocol and taxonomy, while maintaining strict isolation of sensitive credentials.
+
+---
+
+## D20 — Decoupled dynamic providers, endpoints, and model association without hardcoding
+
+**Context:** Initial cloud support had hardcoded provider names, static endpoints, and coupled models directly to specific providers. This prevented users from using custom endpoints/proxies (such as OpenCode Zen, internal corporate gateways, or self-hosted vLLM/Ollama servers) and forced multiple conflicting environment variable naming conventions (`SAILKARI_KEY_*`, `*_ENDPOINT`, etc.). Furthermore, MCP agents had no explicit way of discovering which models were authorized on custom providers.
+
+**Decision:**
+1. **Zero hardcoding:** Remove static provider and model tables. Every provider and model is dynamic.
+2. **Unified syntax:** Use `<provider>:<model>` (e.g. `zen:jev`, `openai:gpt-4o-mini`) everywhere in CLI, TUI, and MCP.
+3. **Strict 4-variable env standard:** For any provider `<NAME>`, use only:
+   - `<NAME>_API_KEY`
+   - `<NAME>_BASE_URL`
+   - `<NAME>_DRIVER_TYPE` (`jev` | `openai-compatible`)
+   - `<NAME>_MODELS` (comma-separated list of allowed/available models)
+4. **TUI provider management:** Add `provider set`, `provider add-model`, `provider remove-model`, `provider get`, `provider list`, and `provider remove`.
+5. **Least-privilege MCP discovery:** MCP's `list_models` only advertises models that the host has explicitly pre-authorized via `<NAME>_MODELS` or TUI configuration, ensuring clients cannot guess or access unapproved providers.
+
+**Consequences:** Completely modular architecture where arbitrary third-party or local inference endpoints can be plugged in instantly without codebase modifications, with a clear, predictable configuration contract.

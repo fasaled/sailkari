@@ -14,8 +14,8 @@ import { OpenAICompatibleDriver } from "./openai-driver.js";
 export interface EvaluationOptions {
   folder: string;
   labels: string;
-  force: boolean;
-  contextReuse: "none" | "file" | "command";
+  force?: boolean;
+  concurrency?: number;
   signal?: AbortSignal;
   onProgress?: (filePath: string, current: number, total: number, message: string) => void;
   onResult?: (result: ProcessingResult) => void;
@@ -49,18 +49,21 @@ export class SailkariApplication {
     await this.engine.dispose();
 
     if (isCloudModel(modelPath)) {
-      const def = getCloudModelDefinition(modelPath)!;
       const config = await loadConfig();
+      const def = getCloudModelDefinition(modelPath, config);
+      if (!def) {
+        throw new Error(`Unable to resolve cloud model definition for '${modelPath}'.`);
+      }
       const resolved = resolveApiKey(def.provider, config);
       if (!resolved) {
-        const envVar = def.provider === "typesafe" ? "TYPESAFE_API_KEY" : `${def.provider.toUpperCase()}_API_KEY`;
+        const envVar = `${def.provider.toUpperCase()}_API_KEY`;
         throw new Error(
-          `API key for provider '${def.provider}' is not configured. Set the ${envVar} environment variable or configure it in the Sailkari TUI using 'key set ${def.provider} <key>'.`
+          `API key for provider '${def.provider}' is not configured. Set the ${envVar} environment variable or configure it using 'provider set ${def.provider} <key>'.`
         );
       }
 
       const driver = def.driverType === "jev"
-        ? new JevCloudDriver(resolved.key, { model: def.canonicalModel })
+        ? new JevCloudDriver(resolved.key, { model: def.canonicalModel, endpoint: def.endpoint })
         : new OpenAICompatibleDriver(resolved.key, { model: def.canonicalModel, endpoint: def.endpoint });
 
       this.engine = createLLMEngine(this.nativeLogger ?? (() => {}), driver);
@@ -125,49 +128,86 @@ export class SailkariApplication {
     options.onStart?.(folder, files.length);
     const store = new ClassificationStore(folder);
     const results: ProcessingResult[] = [];
-    const commandContext = options.contextReuse === "command" ? await this.engine.createContext() : undefined;
 
-    try {
-      for (const filePath of files) {
-        options.signal?.throwIfAborted();
-        if (commandContext && results.length > 0) await commandContext.clearHistory();
-        const fileContext: EngineContext | undefined = options.contextReuse === "file"
-          ? await this.engine.createContext()
-          : commandContext;
-        try {
+    const isCloud = this.modelPath ? isCloudModel(this.modelPath) : false;
+    let modelName = this.modelPath;
+    let providerName = isCloud ? "cloud" : "local";
+    if (this.modelPath && isCloud) {
+      const colonIndex = this.modelPath.indexOf(":");
+      if (colonIndex > 0) {
+        providerName = this.modelPath.slice(0, colonIndex);
+        modelName = this.modelPath.slice(colonIndex + 1);
+      }
+    } else if (this.modelPath) {
+      modelName = basename(this.modelPath);
+    }
+
+    // Default concurrency: 4 for cloud models, 1 for local GGUF models. User can override explicitly with options.concurrency.
+    const effectiveConcurrency = options.concurrency ?? (isCloud ? 4 : 1);
+
+    if (effectiveConcurrency > 1) {
+      // Concurrent execution pool
+      let nextIndex = 0;
+      const workerCount = Math.min(effectiveConcurrency, files.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (nextIndex < files.length) {
+          options.signal?.throwIfAborted();
+          const currentIndex = nextIndex++;
+          const filePath = files[currentIndex]!;
           const result = await processFile(
             filePath,
             labels,
-            options.force,
+            Boolean(options.force),
             this.engine,
             store,
             this.systemPrompt,
             options.signal,
             options.onProgress ? (current, total, message) => options.onProgress!(filePath, current, total, message) : undefined,
-            fileContext,
+            undefined,
+            { model: modelName, provider: providerName },
           );
           results.push(result);
           options.onResult?.(result);
-        } finally {
-          if (options.contextReuse === "file") await fileContext?.dispose();
         }
+      });
+      await Promise.all(workers);
+    } else {
+      // Sequential execution
+      for (const filePath of files) {
+        options.signal?.throwIfAborted();
+        const result = await processFile(
+          filePath,
+          labels,
+          Boolean(options.force),
+          this.engine,
+          store,
+          this.systemPrompt,
+          options.signal,
+          options.onProgress ? (current, total, message) => options.onProgress!(filePath, current, total, message) : undefined,
+          undefined,
+          { model: modelName, provider: providerName },
+        );
+        results.push(result);
+        options.onResult?.(result);
       }
-    } finally {
-      await commandContext?.dispose();
     }
 
     return {
       folder,
       results,
-      summary: summarizeEvaluation(results, performance.now() - startedAt, preparationMs),
+      summary: summarizeEvaluation(results, performance.now() - startedAt, preparationMs, {
+        model: modelName,
+        provider: providerName,
+        concurrency: effectiveConcurrency,
+      }),
     };
   }
 
-  listClassifications(folderPath: string): { filePath: string; labels: string[] }[] {
+  listClassifications(folderPath: string): { filePath: string; labels: string[]; model?: string; provider?: string }[] {
     return new ClassificationStore(resolve(folderPath)).entries();
   }
 
-  removeClassifications(folderPath: string): { filePath: string; labels: string[] }[] {
+  removeClassifications(folderPath: string): { filePath: string; labels: string[]; model?: string; provider?: string }[] {
     const store = new ClassificationStore(resolve(folderPath));
     const entries = store.entries();
     for (const entry of entries) store.remove(entry.filePath);

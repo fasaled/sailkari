@@ -49,10 +49,13 @@ async function run({ id, command, systemPrompt }: RunMessage): Promise<void> {
         folder: command.folder,
         labels: command.labels,
         force: command.force,
-        contextReuse: command.contextReuse,
+        concurrency: command.concurrency,
         signal,
         onStart: (folder, fileCount) => {
-          post({ type: "event", id, text: `Benchmarking ${fileCount} files in ${folder} (${command.contextReuse === "none" ? "fresh context per call" : `reuse context per ${command.contextReuse}`})` });
+          const targetStr = application.loadedModelPath ? ` [model: ${application.loadedModelPath}]` : "";
+          const isCloud = application.loadedModelPath ? isCloudModel(application.loadedModelPath) : false;
+          const effectiveConcurrency = command.concurrency ?? (isCloud ? 4 : 1);
+          post({ type: "event", id, text: `Benchmarking ${fileCount} files in ${folder}${targetStr} (concurrency: ${effectiveConcurrency})` });
           for (const line of formatEvaluationTableHeader()) post({ type: "event", id, text: line, tone: "muted" });
         },
         onProgress: (filePath, current, total, message) => post({ type: "progress", id, text: `${basename(filePath)}: ${message} (${current}/${total})` }),
@@ -67,7 +70,8 @@ async function run({ id, command, systemPrompt }: RunMessage): Promise<void> {
       if (command.type === "remove-tags") application.removeClassifications(command.folder);
       for (const entry of entries) {
         signal.throwIfAborted();
-        if (command.type === "list-tags") post({ type: "event", id, text: `${basename(entry.filePath)} -> ${entry.labels.join(", ") || "no label"}` });
+        const meta = entry.model || entry.provider ? ` [${[entry.provider, entry.model].filter(Boolean).join(":")}]` : "";
+        if (command.type === "list-tags") post({ type: "event", id, text: `${basename(entry.filePath)} -> ${entry.labels.join(", ") || "no label"}${meta}` });
         else {
           post({ type: "event", id, text: `${basename(entry.filePath)} -> removed`, tone: "success" });
         }

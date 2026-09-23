@@ -42,7 +42,9 @@ describe("MCP presentation", () => {
 
   test("list_models reports models without exposing any secret keys", async () => {
     const originalKey = process.env.TYPESAFE_API_KEY;
+    const originalModels = process.env.TYPESAFE_MODELS;
     process.env.TYPESAFE_API_KEY = "ts_secret_live_key_999";
+    process.env.TYPESAFE_MODELS = "jev,jev-latest";
     try {
       const client = await connectTestServer();
       const result = await client.callTool({
@@ -55,7 +57,7 @@ describe("MCP presentation", () => {
         models: { id: string; available: boolean; provider?: string }[];
       };
       expect(structured.models).toBeDefined();
-      const jev = structured.models.find((m) => m.id === "jev");
+      const jev = structured.models.find((m) => m.id === "typesafe:jev");
       expect(jev).toBeDefined();
       expect(jev!.available).toBe(true);
 
@@ -65,19 +67,19 @@ describe("MCP presentation", () => {
     } finally {
       if (originalKey) process.env.TYPESAFE_API_KEY = originalKey;
       else delete process.env.TYPESAFE_API_KEY;
+      if (originalModels) process.env.TYPESAFE_MODELS = originalModels;
+      else delete process.env.TYPESAFE_MODELS;
     }
   });
 
   test("load_model fails with helpful message when cloud API key is missing", async () => {
     const originalKey = process.env.TYPESAFE_API_KEY;
     delete process.env.TYPESAFE_API_KEY;
-    delete process.env.JEV_API_KEY;
-    delete process.env.SAILKARI_KEY_TYPESAFE;
     try {
       const client = await connectTestServer();
       const result = await client.callTool({
         name: "load_model",
-        arguments: { modelPath: "jev" },
+        arguments: { modelPath: "typesafe:jev" },
       });
 
       expect(result.isError).toBe(true);

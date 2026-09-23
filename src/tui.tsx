@@ -9,12 +9,17 @@ import { applyCompletion, completeInput } from "./autocomplete.js";
 import { CommandQueue, type QueuedCommand, type RunnableCommand } from "./command-queue.js";
 import { CommandHistory } from "./command-history.js";
 import {
+  addModelToProviderInConfig,
   getApiKeysStatus,
   isCloudModel,
   normalizeProvider,
   removeApiKeyFromConfig,
+  removeModelFromProviderInConfig,
+  removeProviderFromConfig,
   resolveApiKey,
+  resolveProvider,
   setApiKeyInConfig,
+  setProviderInConfig,
 } from "./api-keys.js";
 
 interface EventLine {
@@ -104,13 +109,22 @@ export function App(): React.ReactElement {
 
   useInput((_value, key) => {
     if (key.tab && !busy) {
-      const nextSuggestions = suggestions.length > 0 ? suggestions : completeInput(input);
-      if (nextSuggestions.length === 0) return;
-      const completion = applyCompletion(input, nextSuggestions[suggestionIndex]!);
+      // Use active suggestions list if we are already cycling, otherwise compute fresh candidates
+      const currentList = suggestions.length > 0 ? suggestions : completeInput(input, config);
+      if (currentList.length === 0) return;
+
+      const nextIndex = suggestions.length > 0 ? (suggestionIndex + 1) % currentList.length : 0;
+      const selected = currentList[nextIndex]!;
+      const completion = applyCompletion(input, selected);
+
       setInput(completion);
       setInputVersion((current) => current + 1);
-      setSuggestionIndex((suggestionIndex + 1) % nextSuggestions.length);
-      setSuggestions(nextSuggestions);
+
+      // Standard shell behavior: keep cycling through sibling candidates at the current level.
+      // To drill down into a subdirectory, the user explicitly enters '/' (or types inside it),
+      // exactly like bash/zsh/powershell menu-complete.
+      setSuggestions(currentList);
+      setSuggestionIndex(nextIndex);
       return;
     }
 
@@ -129,7 +143,7 @@ export function App(): React.ReactElement {
       if (previous !== undefined) {
         setInput(previous);
         setInputVersion((current) => current + 1);
-        setSuggestions(completeInput(previous));
+        setSuggestions(completeInput(previous, config));
         setSuggestionIndex(0);
       }
       return;
@@ -140,7 +154,7 @@ export function App(): React.ReactElement {
       if (next !== undefined) {
         setInput(next);
         setInputVersion((current) => current + 1);
-        setSuggestions(completeInput(next));
+        setSuggestions(completeInput(next, config));
         setSuggestionIndex(0);
       }
       return;
@@ -208,6 +222,59 @@ export function App(): React.ReactElement {
         const active = activeCommandRef.current;
         if (active) workerRef.current?.postMessage({ type: "cancel", id: active.id });
         else addEvent("No active operation to cancel.", "muted");
+      } else if (command.type === "provider") {
+        if (command.action === "set") {
+          const next = setProviderInConfig(config, command.provider, {
+            apiKey: command.key,
+            endpoint: command.endpoint,
+            driverType: command.driverType,
+            models: command.models,
+          });
+          setConfig(next);
+          void saveConfig(next);
+          addEvent(`Provider '${normalizeProvider(command.provider)}' configured successfully.`, "success");
+        } else if (command.action === "add-model") {
+          const next = addModelToProviderInConfig(config, command.provider, command.model);
+          setConfig(next);
+          void saveConfig(next);
+          addEvent(`Model '${command.model}' associated with provider '${normalizeProvider(command.provider)}'.`, "success");
+        } else if (command.action === "remove-model") {
+          const next = removeModelFromProviderInConfig(config, command.provider, command.model);
+          setConfig(next);
+          void saveConfig(next);
+          addEvent(`Model '${command.model}' removed from provider '${normalizeProvider(command.provider)}'.`, "success");
+        } else if (command.action === "get") {
+          const resolved = resolveProvider(command.provider, config);
+          if (resolved) {
+            const modelsStr = resolved.models.length > 0 ? `models: ${resolved.models.join(", ")} [${resolved.modelsSource}]` : "models: (none)";
+            addEvent(`${resolved.name}: key=${resolved.apiKey.slice(0, 4)}... [${resolved.keySource}], endpoint=${resolved.endpoint} [${resolved.endpointSource}], type=${resolved.driverType} [${resolved.driverTypeSource}], ${modelsStr}`, "muted");
+          } else {
+            addEvent(`No provider configured or active for '${command.provider}'.`, "warning");
+          }
+        } else if (command.action === "list") {
+          const statuses = getApiKeysStatus(config);
+          if (statuses.length === 0) {
+            addEvent("No providers configured. Configure one with `provider set <name> [key] [url] [type] [models]` or environment variables.", "muted");
+          } else {
+            addEvent(`Configured / Detected Providers (${statuses.length}):`, "muted");
+            for (const s of statuses) {
+              const statusStr = s.configured ? `key: ${s.maskedKey} [${s.source}]` : "key: (not set)";
+              const endpointStr = s.endpoint ? `endpoint: ${s.endpoint} [${s.endpointSource}]` : "";
+              const typeStr = s.driverType ? `type: ${s.driverType} [${s.driverTypeSource}]` : "";
+              const modelsStr = s.models.length > 0 ? `models: [${s.models.join(", ")}]` : "models: []";
+              addEvent(`  ${s.provider}: ${statusStr} | ${endpointStr} | ${typeStr} | ${modelsStr}`, s.configured ? "muted" : "warning");
+            }
+          }
+        } else if (command.action === "remove") {
+          const { config: next, removed } = removeProviderFromConfig(config, command.provider);
+          if (removed) {
+            setConfig(next);
+            void saveConfig(next);
+            addEvent(`Provider '${normalizeProvider(command.provider)}' removed.`, "success");
+          } else {
+            addEvent(`No stored configuration found for provider '${command.provider}'.`, "muted");
+          }
+        }
       } else if (command.type === "key") {
         if (command.action === "set") {
           const next = setApiKeyInConfig(config, command.provider, command.key);
@@ -286,7 +353,26 @@ export function App(): React.ReactElement {
           <Text bold color="cyan">COMMAND</Text>
           <Text dimColor>{busy ? "working...  cancel stop" : "Enter run  Tab complete  Up/Down history"}</Text>
         </Box>
-        <Text color="gray" wrap="truncate-end">{suggestions.length > 0 ? suggestions.join("  ") : " "}</Text>
+        <Box>
+          {suggestions.length > 0 ? (
+            suggestions.map((suggestion, index) => {
+              const isSelected = index === suggestionIndex;
+              return (
+                <Text
+                  key={suggestion}
+                  color={isSelected ? "cyan" : "gray"}
+                  bold={isSelected}
+                  wrap="truncate-end"
+                >
+                  {suggestion}
+                  {index < suggestions.length - 1 ? "  " : ""}
+                </Text>
+              );
+            })
+          ) : (
+            <Text color="gray"> </Text>
+          )}
+        </Box>
         <Text dimColor wrap="truncate-end">cwd: {process.cwd()}</Text>
         <Text dimColor wrap="truncate-end">model: {config.modelPath ? `${config.modelPath}${isCloudModel(config.modelPath) ? " (cloud)" : ""}` : "not configured"} | prompt: {config.systemPromptPath ?? "default"}</Text>
         <Text dimColor wrap="truncate-end">active: {activeTask ?? "idle"}</Text>
@@ -299,7 +385,7 @@ export function App(): React.ReactElement {
             onChange={(value) => {
               setInput(value);
               commandHistoryRef.current.reset();
-              setSuggestions(completeInput(value));
+              setSuggestions(completeInput(value, config));
               setSuggestionIndex(0);
             }}
             onSubmit={submit}

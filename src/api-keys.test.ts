@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+  addModelToProviderInConfig,
   getApiKeysStatus,
   getCloudModelDefinition,
   isCloudModel,
@@ -7,38 +8,154 @@ import {
   maskApiKey,
   normalizeProvider,
   removeApiKeyFromConfig,
+  removeModelFromProviderInConfig,
+  removeProviderFromConfig,
   resolveApiKey,
+  resolveProvider,
+  resolveProviderEndpoint,
   setApiKeyInConfig,
+  setProviderInConfig,
 } from "./api-keys.js";
 import type { SailkariConfig } from "./config.js";
 
-describe("api-keys", () => {
+describe("api-keys & providers", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     delete process.env.TYPESAFE_API_KEY;
-    delete process.env.JEV_API_KEY;
-    delete process.env.SAILKARI_KEY_TYPESAFE;
-    delete process.env.SAILKARI_API_KEYS;
+    delete process.env.TYPESAFE_BASE_URL;
+    delete process.env.TYPESAFE_DRIVER_TYPE;
+    delete process.env.TYPESAFE_MODELS;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_DRIVER_TYPE;
+    delete process.env.OPENAI_MODELS;
     delete process.env.GROQ_API_KEY;
-    delete process.env.OPENROUTER_API_KEY;
-    delete process.env.SAILKARI_KEY_OPENAI;
+    delete process.env.GROQ_BASE_URL;
+    delete process.env.GROQ_DRIVER_TYPE;
+    delete process.env.GROQ_MODELS;
+    delete process.env.ZEN_API_KEY;
+    delete process.env.ZEN_BASE_URL;
+    delete process.env.ZEN_DRIVER_TYPE;
+    delete process.env.ZEN_MODELS;
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
   });
 
-  describe("normalizeProvider", () => {
-    it("normalizes 'jev' to 'typesafe'", () => {
-      expect(normalizeProvider("jev")).toBe("typesafe");
-      expect(normalizeProvider("JEV")).toBe("typesafe");
+  describe("provider endpoint & driver resolution", () => {
+    it("resolves default endpoint for jev when model is jev", () => {
+      const endpoint = resolveProviderEndpoint("typesafe", undefined, "jev");
+      expect(endpoint.endpoint).toBe("https://api.typesafe.ai/v1/systemone");
     });
 
-    it("lowercases and trims other providers", () => {
+    it("resolves custom endpoint from environment variable", () => {
+      process.env.ZEN_BASE_URL = "https://zen.opencode.ai/api/v1";
+      const endpoint = resolveProviderEndpoint("zen");
+      expect(endpoint.endpoint).toBe("https://zen.opencode.ai/api/v1");
+      expect(endpoint.source).toBe("env");
+    });
+
+    it("resolves custom endpoint from config", () => {
+      const config: SailkariConfig = {
+        providers: {
+          zen: {
+            endpoint: "https://zen.opencode.ai/v1",
+          },
+        },
+      };
+      const endpoint = resolveProviderEndpoint("zen", config);
+      expect(endpoint.endpoint).toBe("https://zen.opencode.ai/v1");
+      expect(endpoint.source).toBe("config");
+    });
+
+    it("resolves full provider with custom endpoint, driverType, models and apiKey", () => {
+      process.env.ZEN_API_KEY = "zen-secret-key";
+      process.env.ZEN_BASE_URL = "https://custom.zen/api";
+      process.env.ZEN_DRIVER_TYPE = "jev";
+      process.env.ZEN_MODELS = "jev,decision-v1";
+
+      const provider = resolveProvider("zen");
+      expect(provider).toBeDefined();
+      expect(provider!.name).toBe("zen");
+      expect(provider!.apiKey).toBe("zen-secret-key");
+      expect(provider!.endpoint).toBe("https://custom.zen/api");
+      expect(provider!.driverType).toBe("jev");
+      expect(provider!.models).toEqual(["jev", "decision-v1"]);
+      expect(provider!.modelsSource).toBe("env");
+    });
+
+    it("allows loading cloud model for arbitrary custom provider", () => {
+      const config: SailkariConfig = {
+        providers: {
+          mygateway: {
+            apiKey: "gw-key",
+            endpoint: "https://gateway.internal/v1",
+            driverType: "jev",
+          },
+        },
+      };
+
+      const def = getCloudModelDefinition("mygateway:jev", config);
+      expect(def).toBeDefined();
+      expect(def!.provider).toBe("mygateway");
+      expect(def!.canonicalModel).toBe("jev");
+      expect(def!.endpoint).toBe("https://gateway.internal/v1");
+      expect(def!.driverType).toBe("jev");
+    });
+  });
+
+  describe("setProviderInConfig & removeProviderFromConfig", () => {
+    it("saves provider configuration in config.providers", () => {
+      const initial: SailkariConfig = {};
+      const updated = setProviderInConfig(initial, "zen", {
+        apiKey: "zen-key",
+        endpoint: "https://opencode-zen/v1",
+        driverType: "jev",
+        models: ["jev", "fast"],
+      });
+
+      expect(updated.providers?.zen).toEqual({
+        apiKey: "zen-key",
+        endpoint: "https://opencode-zen/v1",
+        driverType: "jev",
+        models: ["jev", "fast"],
+      });
+      expect(updated.apiKeys?.zen).toBe("zen-key");
+    });
+
+    it("adds and removes models from provider", () => {
+      const initial: SailkariConfig = {
+        providers: {
+          zen: { apiKey: "key", models: ["m1"] },
+        },
+      };
+
+      const added = addModelToProviderInConfig(initial, "zen", "m2");
+      expect(added.providers?.zen?.models).toEqual(["m1", "m2"]);
+
+      const removed = removeModelFromProviderInConfig(added, "zen", "m1");
+      expect(removed.providers?.zen?.models).toEqual(["m2"]);
+    });
+
+    it("removes provider configuration from config", () => {
+      const initial: SailkariConfig = {
+        providers: {
+          zen: { apiKey: "zen-key" },
+        },
+      };
+      const { config: updated, removed } = removeProviderFromConfig(initial, "zen");
+      expect(removed).toBe(true);
+      expect(updated.providers?.zen).toBeUndefined();
+    });
+  });
+
+  describe("normalizeProvider", () => {
+    it("lowercases and trims providers", () => {
       expect(normalizeProvider(" TypeSafe ")).toBe("typesafe");
       expect(normalizeProvider("OpenAI")).toBe("openai");
+      expect(normalizeProvider("ZEN")).toBe("zen");
     });
   });
 
@@ -55,45 +172,19 @@ describe("api-keys", () => {
   describe("resolveApiKey", () => {
     it("resolves from config if no env var is present", () => {
       const config: SailkariConfig = {
-        apiKeys: { typesafe: "ts_config_key_123" },
+        providers: { typesafe: { apiKey: "ts_config_key_123" } },
       };
       const resolved = resolveApiKey("typesafe", config);
-      expect(resolved).toEqual({ key: "ts_config_key_123", source: "config" });
-    });
-
-    it("resolves alias 'jev' from config typesafe key", () => {
-      const config: SailkariConfig = {
-        apiKeys: { typesafe: "ts_config_key_123" },
-      };
-      const resolved = resolveApiKey("jev", config);
       expect(resolved).toEqual({ key: "ts_config_key_123", source: "config" });
     });
 
     it("prioritizes TYPESAFE_API_KEY over config", () => {
       process.env.TYPESAFE_API_KEY = "ts_env_key_456";
       const config: SailkariConfig = {
-        apiKeys: { typesafe: "ts_config_key_123" },
+        providers: { typesafe: { apiKey: "ts_config_key_123" } },
       };
       const resolved = resolveApiKey("typesafe", config);
       expect(resolved).toEqual({ key: "ts_env_key_456", source: "env" });
-    });
-
-    it("resolves from JEV_API_KEY env var", () => {
-      process.env.JEV_API_KEY = "ts_jev_env_789";
-      const resolved = resolveApiKey("typesafe");
-      expect(resolved).toEqual({ key: "ts_jev_env_789", source: "env" });
-    });
-
-    it("resolves from SAILKARI_KEY_<PROVIDER> env var", () => {
-      process.env.SAILKARI_KEY_TYPESAFE = "ts_prefixed_env";
-      const resolved = resolveApiKey("typesafe");
-      expect(resolved).toEqual({ key: "ts_prefixed_env", source: "env" });
-    });
-
-    it("resolves from SAILKARI_API_KEYS json env var", () => {
-      process.env.SAILKARI_API_KEYS = JSON.stringify({ typesafe: "ts_json_key" });
-      const resolved = resolveApiKey("typesafe");
-      expect(resolved).toEqual({ key: "ts_json_key", source: "env" });
     });
 
     it("returns undefined if no key is configured", () => {
@@ -113,27 +204,26 @@ describe("api-keys", () => {
     it("sets API key in config preserving existing keys", () => {
       const initial: SailkariConfig = {
         modelPath: "old.gguf",
-        apiKeys: { other: "val" },
+        providers: { other: { apiKey: "val" } },
       };
       const updated = setApiKeyInConfig(initial, "typesafe", "ts_new_key");
-      expect(updated.apiKeys).toEqual({
-        other: "val",
-        typesafe: "ts_new_key",
-      });
+      expect(updated.providers?.typesafe?.apiKey).toBe("ts_new_key");
+      expect(updated.providers?.other?.apiKey).toBe("val");
       expect(updated.modelPath).toBe("old.gguf");
     });
 
-    it("removes API key from config", () => {
+    it("removes API key / provider from config", () => {
       const initial: SailkariConfig = {
-        apiKeys: { typesafe: "ts_key", other: "other_key" },
+        providers: { typesafe: { apiKey: "ts_key" }, other: { apiKey: "other_key" } },
       };
       const { config: updated, removed } = removeApiKeyFromConfig(initial, "typesafe");
       expect(removed).toBe(true);
-      expect(updated.apiKeys).toEqual({ other: "other_key" });
+      expect(updated.providers?.typesafe).toBeUndefined();
+      expect(updated.providers?.other?.apiKey).toBe("other_key");
     });
 
-    it("handles removing non-existent API key gracefully", () => {
-      const initial: SailkariConfig = { apiKeys: { other: "key" } };
+    it("handles removing non-existent provider gracefully", () => {
+      const initial: SailkariConfig = { providers: { other: { apiKey: "key" } } };
       const { config, removed } = removeApiKeyFromConfig(initial, "typesafe");
       expect(removed).toBe(false);
       expect(config).toBe(initial);
@@ -141,17 +231,18 @@ describe("api-keys", () => {
   });
 
   describe("cloud models listing and status", () => {
-    it("identifies cloud models correctly", () => {
-      expect(isCloudModel("jev")).toBe(true);
+    it("identifies cloud models correctly using provider:model format", () => {
       expect(isCloudModel("typesafe:jev")).toBe(true);
       expect(isCloudModel("typesafe:jev-latest")).toBe(true);
       expect(isCloudModel("openai:gpt-4o-mini")).toBe(true);
       expect(isCloudModel("groq:llama-3.3-70b-versatile")).toBe(true);
       expect(isCloudModel("openrouter:anthropic/claude-3.5-sonnet")).toBe(true);
+      expect(isCloudModel("zen:jev")).toBe(true);
       expect(isCloudModel("/path/to/model.gguf")).toBe(false);
+      expect(isCloudModel("model.gguf")).toBe(false);
     });
 
-    it("parses dynamic cloud model definition for OpenAI-compatible providers", () => {
+    it("parses dynamic cloud model definition for any provider", () => {
       const def = getCloudModelDefinition("openai:custom-model");
       expect(def).toBeDefined();
       expect(def!.provider).toBe("openai");
@@ -159,17 +250,20 @@ describe("api-keys", () => {
       expect(def!.driverType).toBe("openai-compatible");
     });
 
-    it("lists cloud models with availability status based on resolved key", () => {
+    it("lists cloud models dynamically from configured provider models", () => {
       process.env.TYPESAFE_API_KEY = "ts_available_key";
+      process.env.TYPESAFE_MODELS = "jev,jev-fast";
+
       const models = listCloudModels({});
-      const jev = models.find((m) => m.id === "jev");
-      expect(jev).toBeDefined();
-      expect(jev!.available).toBe(true);
-      expect(jev!.source).toBe("env");
+      expect(models.length).toBe(2);
+      expect(models.map((m) => m.id)).toEqual(["typesafe:jev", "typesafe:jev-fast"]);
+      expect(models[0]?.available).toBe(true);
     });
 
-    it("reports keys status with masked values", () => {
+    it("reports providers status with masked keys and associated models", () => {
       process.env.TYPESAFE_API_KEY = "ts_very_secret_api_key_12345";
+      process.env.TYPESAFE_MODELS = "jev";
+
       const status = getApiKeysStatus({});
       const typesafeStatus = status.find((s) => s.provider === "typesafe");
       expect(typesafeStatus).toBeDefined();
@@ -177,6 +271,7 @@ describe("api-keys", () => {
       expect(typesafeStatus!.source).toBe("env");
       expect(typesafeStatus!.maskedKey).toBe("ts_v...2345");
       expect(typesafeStatus!.rawKey).toBe("ts_very_secret_api_key_12345");
+      expect(typesafeStatus!.models).toEqual(["jev"]);
     });
   });
 });

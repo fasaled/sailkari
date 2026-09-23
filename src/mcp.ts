@@ -91,15 +91,14 @@ export function createMcpServer(state = createState()): McpServer {
       folder: z.string().describe("Folder containing documents to evaluate"),
       labels: z.string().describe("YAML label taxonomy path"),
       force: z.boolean().optional().default(false).describe("Run inference even when stored labels exist"),
-      contextReuse: z.enum(["none", "file", "command"]).optional().default("none").describe("Context allocation scope"),
+      concurrency: z.number().int().positive().optional().describe("Parallel classification concurrency"),
     },
-  }, async ({ folder, labels, force, contextReuse }) => {
+  }, async ({ folder, labels, force, concurrency }) => {
     if (!state.application.loadedModelPath) throw new Error("Load a model first with load_model.");
-    const evaluation = await state.application.evaluate({ folder, labels, force, contextReuse });
+    const evaluation = await state.application.evaluate({ folder, labels, force, concurrency });
     return jsonResult({
       modelPath: state.application.loadedModelPath,
       folder: evaluation.folder,
-      contextReuse,
       results: evaluation.results.map((result) => ({ ...result, tableRow: formatEvaluationTableRow(result.filePath.split("/").pop() ?? result.filePath, result) })),
       summary: evaluation.summary,
     });

@@ -13,6 +13,9 @@ export interface EvaluationSummary {
   inputTokensEstimate: number;
   calls: number;
   chunks: number;
+  model?: string;
+  provider?: string;
+  concurrency?: number;
 }
 
 export function formatDuration(milliseconds: number): string {
@@ -94,7 +97,8 @@ export function formatEvaluationTableRow(filename: string, result: ProcessingRes
 export function summarizeEvaluation(
   results: ProcessingResult[],
   totalDurationMs: number,
-  preparationMs: number
+  preparationMs: number,
+  metadata?: { model?: string; provider?: string; concurrency?: number }
 ): EvaluationSummary {
   const summary: EvaluationSummary = {
     files: results.length,
@@ -109,6 +113,9 @@ export function summarizeEvaluation(
     inputTokensEstimate: 0,
     calls: 0,
     chunks: 0,
+    model: metadata?.model,
+    provider: metadata?.provider,
+    concurrency: metadata?.concurrency,
   };
 
   for (const result of results) {
@@ -129,12 +136,27 @@ export function formatEvaluationSummaryTable(summary: EvaluationSummary): string
   const average = summary.evaluated ? summary.inferenceMs / summary.evaluated : 0;
   const inputRate = summary.inferenceMs ? Math.round(summary.inputTokensEstimate / (summary.inferenceMs / 1_000)) : 0;
   const header = [fit("METRIC", 14), fit("VALUE", 16), "DETAIL"].join(" ");
-  return [
+  const rows: string[] = [
     "Benchmark summary",
     header,
     "-".repeat(header.length),
+  ];
+
+  if (summary.model || summary.provider) {
+    const provStr = summary.provider ? `provider: ${summary.provider}` : "";
+    const modStr = summary.model ? `model: ${summary.model}` : "";
+    const concStr = summary.concurrency !== undefined ? `concurrency: ${summary.concurrency}` : "";
+    const detail = [provStr, modStr, concStr].filter(Boolean).join(" | ");
+    rows.push([fit("Target", 14), fit(summary.model ?? "custom", 16), detail].join(" "));
+  } else if (summary.concurrency !== undefined) {
+    rows.push([fit("Concurrency", 14), fit(String(summary.concurrency), 16), `${summary.concurrency} parallel worker${summary.concurrency === 1 ? "" : "s"}`].join(" "));
+  }
+
+  rows.push(
     [fit("Files", 14), fit(String(summary.files), 16), `${summary.tagged} labelled | ${summary.noLabel} no match | ${summary.skipped} skipped`].join(" "),
     [fit("Timing", 14), fit(formatDuration(summary.totalDurationMs), 16), `setup ${formatDuration(summary.preparationMs)} | inference ${formatDuration(summary.inferenceMs)} | mean ${formatDuration(average)}/file`].join(" "),
-    [fit("Input", 14), fit(`~${inputRate} tok/s`, 16), `${formatBytes(summary.sourceBytes)} | ~${summary.inputTokensEstimate} tokens | ${summary.calls} calls | ${summary.chunks} chunks`].join(" "),
-  ];
+    [fit("Input", 14), fit(`~${inputRate} tok/s`, 16), `${formatBytes(summary.sourceBytes)} | ~${summary.inputTokensEstimate} tokens | ${summary.calls} calls | ${summary.chunks} chunks`].join(" ")
+  );
+
+  return rows;
 }

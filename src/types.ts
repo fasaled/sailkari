@@ -38,6 +38,8 @@ export interface ProcessingResult {
   inferenceMs?: number;
   sourceBytes?: number;
   inputTokensEstimate?: number;
+  model?: string;
+  provider?: string;
 }
 
 export interface ProcessingSummary {

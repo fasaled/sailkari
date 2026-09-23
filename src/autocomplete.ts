@@ -1,10 +1,11 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { KNOWN_CLOUD_MODELS, KNOWN_PROVIDERS } from "./api-keys.js";
+import { listCloudModels, listConfiguredProviders } from "./api-keys.js";
+import type { SailkariConfig } from "./config.js";
 
-const COMMANDS = ["model", "prompt", "classify", "list-tags", "remove-tags", "key", "queue", "cancel", "help", "quit"];
+const COMMANDS = ["model", "prompt", "classify", "list-tags", "remove-tags", "provider", "key", "queue", "cancel", "help", "quit"];
+const PROVIDER_ACTIONS = ["set", "add-model", "remove-model", "get", "list", "remove"];
 const KEY_ACTIONS = ["set", "get", "list", "remove"];
-const CLOUD_MODEL_NAMES = Object.keys(KNOWN_CLOUD_MODELS);
 
 function currentToken(input: string): { before: string; token: string } {
   const match = input.match(/(?:^|\s)([^\s]*)$/);
@@ -34,7 +35,7 @@ function pathCandidates(token: string, predicate: (path: string) => boolean, def
   }
 }
 
-export function completeInput(input: string): string[] {
+export function completeInput(input: string, config?: SailkariConfig): string[] {
   const { before, token } = currentToken(input);
   if (!before && !token.includes("/")) {
     return COMMANDS.filter((command) => command.startsWith(token));
@@ -43,16 +44,37 @@ export function completeInput(input: string): string[] {
   const command = input.trim().split(/\s+/)[0];
   const tokens = input.trim().split(/\s+/);
   const argumentIndex = tokens.length - 1 + (input.endsWith(" ") ? 1 : 0);
+
+  const availableProviders = listConfiguredProviders(config);
+
   if (command === "model" && argumentIndex === 1) {
-    const cloudCandidates = CLOUD_MODEL_NAMES.filter((name) => name.toLowerCase().startsWith(token.toLowerCase()));
+    const cloudModels = listCloudModels(config);
+    const cloudCandidates = new Set<string>(cloudModels.map((m) => m.id));
+
+    // Also offer <provider>: for quick typing
+    for (const p of availableProviders) {
+      cloudCandidates.add(`${p}:`);
+    }
+
+    const matchingCloud = Array.from(cloudCandidates).filter((name) => name.toLowerCase().startsWith(token.toLowerCase()));
     const fileCandidates = pathCandidates(token, (path) => extname(path).toLowerCase() === ".gguf");
-    return [...cloudCandidates, ...fileCandidates];
+    return [...matchingCloud, ...fileCandidates];
+  }
+  if (command === "provider" && argumentIndex === 1) {
+    return PROVIDER_ACTIONS.filter((action) => action.startsWith(token.toLowerCase()));
+  }
+  if (
+    command === "provider" &&
+    argumentIndex === 2 &&
+    ["set", "add-model", "remove-model", "get", "remove", "delete"].includes(tokens[1]?.toLowerCase() ?? "")
+  ) {
+    return availableProviders.filter((provider) => provider.startsWith(token.toLowerCase()));
   }
   if (command === "key" && argumentIndex === 1) {
     return KEY_ACTIONS.filter((action) => action.startsWith(token.toLowerCase()));
   }
   if (command === "key" && argumentIndex === 2 && ["set", "get", "remove", "delete"].includes(tokens[1]?.toLowerCase() ?? "")) {
-    return [...KNOWN_PROVIDERS].filter((provider) => provider.startsWith(token.toLowerCase()));
+    return availableProviders.filter((provider) => provider.startsWith(token.toLowerCase()));
   }
   if (command === "prompt" && argumentIndex === 1) {
     return pathCandidates(token, (path) => statSync(path).isFile());

@@ -175,10 +175,16 @@ Global user settings are stored in:
 `~/.config/sailkari/config.json`
 
 Contains:
-- `modelPath`: path to the last loaded GGUF model or cloud model name (e.g. `jev`).
+- `modelPath`: path to the last loaded GGUF model or cloud model identifier (`<provider>:<model>`).
 - `systemPromptPath`: path to the active custom prompt file (if any).
 - `commandHistory`: array of previously executed commands.
-- `apiKeys`: dictionary of API keys per provider (`typesafe`, etc.) managed via TUI commands.
+- `apiKeys`: legacy dictionary of API keys per provider (`typesafe`, etc.).
+- `providers`: dynamic dictionary of provider configurations:
+  - `apiKey`: secret token for the provider.
+  - `endpoint`: custom base URL or endpoint.
+  - `driverType`: `"jev"` or `"openai-compatible"`.
+  - `models`: string array of models registered for this provider.
+  - `description`: optional label/notes.
 
 ---
 
@@ -187,15 +193,20 @@ Contains:
 ### 7.1 TUI Commands
 
 ```text
-model <path.gguf|name>             Load and persist GGUF or cloud model (e.g. jev)
+model <path.gguf|provider:model>   Load and persist GGUF or cloud model (e.g. zen:jev, openai:gpt-4o-mini)
 prompt <path|default>              Set default or custom system prompt
 classify <folder> <labels.yaml>   Classify documents in a folder
   [--force]                        Re-run inference even if cached
-  [--reuse-context-file]           Reuse context across chunks of each file
-  [--reuse-context-command]        Reuse context across the whole batch
+  [--concurrency <n>]              Number of parallel workers (default 4 for cloud, 1 for local)
 list-tags <folder>                 List stored classifications
 remove-tags <folder>               Remove stored classifications
-key set <provider> <key>           Save API key for a cloud provider
+provider set <name> [key] [url] [t] [m] Configure provider key, endpoint, driver type and models
+provider add-model <p> <model>     Associate a model with a provider
+provider remove-model <p> <model>  Unassociate a model from a provider
+provider get <name>                Show status, endpoint, driver type and models for a provider
+provider list                      List all configured/detected providers
+provider remove <name>             Remove a configured provider
+key set <provider> <key>           Save API key for a provider
 key get <provider>                 Show configured API key for provider
 key list                           List configured providers
 key remove <provider>              Remove API key for provider
@@ -213,17 +224,17 @@ quit                               Exit application
 Launched with `sailkari --mcp`. Exposes:
 
 - **Tools:**
-  - `list_models()`: Discovers available models (local models and cloud models with active credentials).
-  - `load_model({ modelPath: string })`: Loads a local GGUF model or an authorized cloud model (e.g. `jev`).
+  - `list_models()`: Discovers available models (local models and cloud models explicitly associated via `<PROVIDER>_MODELS` or configured in the TUI).
+  - `load_model({ modelPath: string })`: Loads a local GGUF model or an authorized cloud model (e.g. `zen:jev`, `openai:gpt-4o-mini`).
   - `set_system_prompt({ systemPrompt: string })`
-  - `classify_documents({ folder: string, labels: string, force?: boolean, contextReuse?: "none"|"file"|"command" })`
+  - `classify_documents({ folder: string, labels: string, force?: boolean, concurrency?: number })`
   - `list_classifications({ folder: string })`
   - `remove_classifications({ folder: string })`
 - **Resources:**
   - `sailkari://system-prompt-contract`: Output contract guidelines and format specification.
 - **Prompts:**
   - `generate-system-prompt({ taxonomy: string })`: Produces a prompt complying with Sailkari's parser contract.
-- **Security Invariant:** MCP never exposes API key values, hashes, or credential mutation tools. API keys must be configured via the TUI or passed via environment variables (e.g. `TYPESAFE_API_KEY`).
+- **Security & Authorization Invariant:** MCP strictly prevents credential management and model guessing. Agents can only see and load models explicitly authorized by the user/host via `<PROVIDER>_MODELS` or TUI configuration. Credentials must be pre-configured and are never exposed over JSON-RPC.
 
 ---
 

@@ -75,6 +75,7 @@ export class JevContext implements EngineContext {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${this.apiKey}`,
+        "Connection": "keep-alive",
       },
       body: JSON.stringify(payload),
       signal,

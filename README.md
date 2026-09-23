@@ -148,17 +148,17 @@ The final summary groups results into:
 
 This keeps quality signals and performance signals together while comparing models.
 
-## Context modes
+## Concurrency
 
-The default mode creates a fresh inference context for every model call, maximizing isolation.
-Two optional modes measure the effect of reusing allocated context memory without sharing
-inference history:
+Sailkari processes document classification in parallel:
 
-- `--reuse-context-file`: reuse a context between chunks of the same file, then dispose it.
-- `--reuse-context-command`: reuse one context across the full `classify` command.
+- **Cloud models:** Default concurrency is **4** parallel workers with HTTP connection keep-alive.
+- **Local GGUF models:** Default concurrency is **1** to prevent GPU memory contention and VRAM exhaustion.
+- **Custom concurrency:** Pass `--concurrency <N>` (or `-c <N>`) to override the number of parallel workers for any model:
 
-In both modes, Sailkari clears context history between chunks and documents before the next
-inference request.
+```bash
+classify examples/documents examples/labels.yaml --concurrency 6
+```
 
 ## Commands
 
@@ -169,67 +169,78 @@ model <path.gguf|name>             Load GGUF or cloud model (e.g. jev)
 prompt <path|default>              Configure the system prompt
 classify <folder> <labels.yaml>   Classify a folder
 classify <folder> <labels.yaml> --force
-classify <folder> <labels.yaml> --reuse-context-file
-classify <folder> <labels.yaml> --reuse-context-command
+classify <folder> <labels.yaml> --concurrency <n>
 list-tags <folder>                 List stored classifications
 remove-tags <folder>               Remove stored classifications
-key set <provider> <key>           Save API key for a cloud provider
-key get <provider>                 Show configured API key for provider
-key list                           List configured providers
-key remove <provider>              Remove API key for provider
+provider set <name> [key] [url] [t] [m] Configure provider key, endpoint, driver type and models
+provider add-model <provider> <model>   Associate a model with a provider
+provider remove-model <p> <model>       Unassociate a model from a provider
+provider get <name>                 Show status and configuration for a provider
+provider list                       List all configured/detected providers
+provider remove <name>              Remove a configured provider
+key set <provider> <key>            Save API key for a provider
+key get <provider>                  Show configured API key for provider
+key list                            List configured providers
+key remove <provider>               Remove API key for provider
 cancel                              Cancel the active operation
 queue                               List pending commands
 queue remove <position>             Remove a pending command
 queue move <from> <to>              Reorder pending commands
 queue clear                         Remove all pending commands
-help                               Show command help
-quit                               Exit Sailkari
+help                                Show command help
+quit                                Exit Sailkari
 ```
 
-## Cloud Models & API Keys
+## Cloud Models & Providers
 
-Sailkari supports hybrid benchmarking comparing local GGUF models against cloud models:
+Sailkari supports hybrid benchmarking comparing local GGUF models against any cloud provider and model without hardcoded restrictions:
 
-1. **System One Decision Models:** **TypeSafe Jev** (`jev`, `typesafe:jev-latest`), returning instant structured choices and probabilities without text generation.
-2. **OpenAI-Compatible LLMs:** Any provider adhering to the chat completions API, including **OpenAI** (`openai:gpt-4o-mini`, `openai:gpt-4o`), **Groq** (`groq:llama-3.3-70b-versatile`), or **OpenRouter** (`openrouter:<model>`).
+1. **System One Decision Models:** Such as **TypeSafe Jev** or custom Decision Model gateways running the Jev protocol, returning structured choices and probabilities without text generation.
+2. **OpenAI-Compatible LLMs:** Any custom proxy, gateway, or provider adhering to the chat completions API (e.g. OpenAI, Groq, OpenRouter, vLLM, Ollama, OpenCode Zen).
+
+Any model can be referenced using the `<provider>:<model>` syntax (e.g., `zen:jev`, `openai:gpt-4o-mini`, `openrouter:anthropic/claude-3.5-sonnet`).
 
 ### System Prompts in Cloud Models
 
-- **For generative LLMs (OpenAI, Groq, OpenRouter):** The standard Sailkari system prompt (`DEFAULT_SYSTEM_PROMPT` or custom) is passed as `role: "system"` with `temperature: 0`. The strict output contract guarantees clean, single-label responses.
+- **For generative LLMs (OpenAI-compatible):** The standard Sailkari system prompt (`DEFAULT_SYSTEM_PROMPT` or custom) is passed as `role: "system"` with `temperature: 0`. The strict output contract guarantees clean, single-label responses.
 - **For Jev (System One):** Jev evaluates native `choice` questions against criteria. Domain instructions from your configured system prompt are passed into Jev's evaluation instructions, while conversational formatting boilerplate is stripped automatically.
 
-### Managing API keys in the TUI
+### Configuring Providers & Models in the TUI
 
-Credentials can be saved and managed directly in the TUI, persisted in `~/.config/sailkari/config.json`:
+Providers and their associated models can be dynamically configured in the TUI and are saved in `~/.config/sailkari/config.json`:
 
 ```text
-key set typesafe ts_live_your_key_here
-key set openai sk-proj-...
-key set groq gsk-...
-key list
-key get typesafe
-model jev
-classify examples/documents examples/labels.yaml
-model openai:gpt-4o-mini
+# Configure a provider with custom endpoint, driver type and associated models:
+provider set zen --key mi_key --endpoint https://api.zen.opencode.ai/v1 --type jev --models jev,decision-v1
+
+# Or associate models incrementally:
+provider add-model zen jev
+provider add-model openai gpt-4o-mini
+
+# Inspect and list configured providers and their models:
+provider list
+provider get zen
+
+# Load and benchmark:
+model zen:jev
 classify examples/documents examples/labels.yaml --force
 ```
 
-### Passing API keys via environment variables
+Legacy `key set <provider> <key>` commands remain fully supported for quick API key configuration.
 
-For automated runs and MCP server setups (e.g., in Claude Desktop or cursor configuration), API keys can be passed as environment variables without writing them to disk:
+### Passing Credentials & Models via Environment Variables
+
+For automated runs and MCP server setups (e.g., in Claude Desktop or cursor configuration), providers, keys, endpoints, driver types, and allowed models are configured via 4 standard, predictable environment variables per provider:
 
 ```bash
-# Specific provider variables
-TYPESAFE_API_KEY="ts_live_..." sailkari --mcp
-OPENAI_API_KEY="sk-..." sailkari --mcp
-GROQ_API_KEY="gsk-..." sailkari --mcp
-
-# Or Sailkari prefixed variables
-SAILKARI_KEY_TYPESAFE="ts_live_..." sailkari --mcp
-SAILKARI_KEY_OPENAI="sk-..." sailkari --mcp
+# For any provider <NAME> (e.g., ZEN, OPENAI, TYPESAFE, GROQ):
+export ZEN_API_KEY="my_api_key"
+export ZEN_BASE_URL="https://api.zen.opencode.ai/v1"
+export ZEN_DRIVER_TYPE="jev"                         # "jev" or "openai-compatible" (optional)
+export ZEN_MODELS="jev,decision-v1"                  # comma-separated models (optional)
 ```
 
-Environment variables always take precedence over keys saved in `config.json`. When an API key is present in either the environment or configuration, the corresponding cloud models become discoverable via `list_models` and selectable via `load_model({ modelPath: "..." })`.
+Environment variables always take precedence over keys saved in `config.json`. When `list_models` is invoked by an MCP client, it returns all models associated via `<PROVIDER>_MODELS` or configured in the TUI, keeping authorized model choices explicit and secure without exposing secret keys over stdio.
 
 The upper panel displays benchmark tables, summaries, warnings, and errors. Model and system
 prompt configuration is saved in `~/.config/sailkari/config.json`. Use Tab for command and

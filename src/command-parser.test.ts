@@ -8,18 +8,18 @@ describe("parseCommand", () => {
       folder: "folder with spaces",
       labels: "labels.yaml",
       force: true,
-      contextReuse: "none",
+      concurrency: undefined,
     });
   });
 
-  test("parses explicit file and command context reuse modes", () => {
-    expect(parseCommand("classify documents labels.yaml --reuse-context-file")).toMatchObject({
+  test("parses explicit concurrency flag", () => {
+    expect(parseCommand("classify documents labels.yaml --concurrency 6")).toMatchObject({
       type: "classify",
-      contextReuse: "file",
+      concurrency: 6,
     });
-    expect(parseCommand("classify documents labels.yaml --reuse-context-command")).toMatchObject({
+    expect(parseCommand("classify documents labels.yaml -c 8")).toMatchObject({
       type: "classify",
-      contextReuse: "command",
+      concurrency: 8,
     });
   });
 
@@ -71,12 +71,101 @@ describe("parseCommand", () => {
     expect(() => parseCommand("key unknown")).toThrow("Unknown key action: unknown");
   });
 
+  test("parses provider management commands", () => {
+    expect(parseCommand("provider set typesafe ts_my_key_123")).toEqual({
+      type: "provider",
+      action: "set",
+      provider: "typesafe",
+      key: "ts_my_key_123",
+      endpoint: undefined,
+      driverType: undefined,
+    });
+
+    expect(parseCommand("provider set zen my_key https://api.opencode.ai/v1/systemone jev")).toEqual({
+      type: "provider",
+      action: "set",
+      provider: "zen",
+      key: "my_key",
+      endpoint: "https://api.opencode.ai/v1/systemone",
+      driverType: "jev",
+    });
+
+    expect(parseCommand("provider set zen --key my_key --endpoint https://api.opencode.ai/v1/systemone --type jev --models jev,fast")).toEqual({
+      type: "provider",
+      action: "set",
+      provider: "zen",
+      key: "my_key",
+      endpoint: "https://api.opencode.ai/v1/systemone",
+      driverType: "jev",
+      models: ["jev", "fast"],
+    });
+
+    expect(parseCommand("provider set zen -k my_key -e https://api.opencode.ai/v1/systemone -t jev -m jev,fast")).toEqual({
+      type: "provider",
+      action: "set",
+      provider: "zen",
+      key: "my_key",
+      endpoint: "https://api.opencode.ai/v1/systemone",
+      driverType: "jev",
+      models: ["jev", "fast"],
+    });
+
+    expect(parseCommand("provider set zen -key my_key -endpoint https://api.opencode.ai/v1/systemone -models jev")).toEqual({
+      type: "provider",
+      action: "set",
+      provider: "zen",
+      key: "my_key",
+      endpoint: "https://api.opencode.ai/v1/systemone",
+      driverType: undefined,
+      models: ["jev"],
+    });
+
+    expect(parseCommand("provider add-model zen jev")).toEqual({
+      type: "provider",
+      action: "add-model",
+      provider: "zen",
+      model: "jev",
+    });
+
+    expect(parseCommand("provider remove-model zen jev")).toEqual({
+      type: "provider",
+      action: "remove-model",
+      provider: "zen",
+      model: "jev",
+    });
+
+    expect(parseCommand("provider get zen")).toEqual({
+      type: "provider",
+      action: "get",
+      provider: "zen",
+    });
+
+    expect(parseCommand("provider list")).toEqual({
+      type: "provider",
+      action: "list",
+    });
+
+    expect(parseCommand("provider remove zen")).toEqual({
+      type: "provider",
+      action: "remove",
+      provider: "zen",
+    });
+  });
+
+  test("rejects invalid provider command syntax", () => {
+    expect(() => parseCommand("provider")).toThrow("Usage: provider");
+    expect(() => parseCommand("provider set")).toThrow("Usage: provider set");
+    expect(() => parseCommand("provider get")).toThrow("Usage: provider get");
+    expect(() => parseCommand("provider remove")).toThrow("Usage: provider remove");
+    expect(() => parseCommand("provider unknown")).toThrow("Unknown provider action: unknown");
+  });
+
   test("formats help as an aligned command table", () => {
     const lines = HELP_TEXT.split("\n");
     const descriptionColumn = lines[0]!.indexOf("DESCRIPTION");
 
     expect(descriptionColumn).toBeGreaterThan(38);
     expect(lines.find((line) => line.startsWith("queue move"))?.indexOf("Reorder")).toBe(descriptionColumn);
-    expect(lines.find((line) => line.startsWith("classify <folder> <labels.yaml> --reuse-context-command"))?.indexOf("Reuse")).toBe(descriptionColumn);
+    expect(lines.find((line) => line.startsWith("classify <folder> <labels.yaml> --concurrency"))?.indexOf("Set")).toBe(descriptionColumn);
   });
 });

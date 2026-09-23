@@ -10,10 +10,11 @@ describe("evaluation metrics", () => {
     ];
 
     expect(formatFileMetrics(results[0]!)).toContain("inference 1.00s");
-    expect(formatEvaluationSummaryTable(summarizeEvaluation(results, 4_000, 500))).toEqual([
+    expect(formatEvaluationSummaryTable(summarizeEvaluation(results, 4_000, 500, { model: "jev", provider: "zen", concurrency: 4 }))).toEqual([
       "Benchmark summary",
       "METRIC         VALUE            DETAIL",
       "--------------------------------------",
+      "Target         jev              provider: zen | model: jev | concurrency: 4",
       "Files          3                1 labelled | 1 no match | 1 skipped",
       "Timing         4.00s            setup 500ms | inference 3.00s | mean 1.50s/file",
       "Input          ~500 tok/s       3.1 KB | ~1500 tokens | 3 calls | 3 chunks",

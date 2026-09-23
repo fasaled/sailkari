@@ -16,12 +16,14 @@ export async function processFile(
   systemPrompt?: string,
   signal?: AbortSignal,
   onProgress?: ProgressCallback,
-  context?: EngineContext
+  context?: EngineContext,
+  modelMetadata?: { model?: string; provider?: string }
 ): Promise<ProcessingResult> {
   const startedAt = performance.now();
   signal?.throwIfAborted();
   const hasAIClassified = store.has(filePath);
-  const storedLabels = hasAIClassified ? store.getLabels(filePath) : [];
+  const storedEntry = hasAIClassified ? store.getEntry(filePath) : undefined;
+  const storedLabels = storedEntry?.labels ?? [];
 
   if (storedLabels.length > 0 && !force) {
     return {
@@ -30,6 +32,8 @@ export async function processFile(
       labels: storedLabels,
       reason: "already classified",
       durationMs: performance.now() - startedAt,
+      model: storedEntry?.model,
+      provider: storedEntry?.provider,
     };
   }
 
@@ -69,7 +73,7 @@ export async function processFile(
 
   if (!result || result.labels.length === 0) {
     if (force && hasAIClassified) {
-      store.setLabels(filePath, []);
+      store.setLabels(filePath, [], modelMetadata);
     }
     return {
       status: "none",
@@ -78,6 +82,8 @@ export async function processFile(
       inferenceMs,
       sourceBytes: fileInfo.size,
       inputTokensEstimate: Math.ceil(content.length / 4),
+      model: modelMetadata?.model,
+      provider: modelMetadata?.provider,
     };
   }
 
@@ -85,7 +91,7 @@ export async function processFile(
     store.remove(filePath);
   }
 
-  store.setLabels(filePath, result.labels);
+  store.setLabels(filePath, result.labels, modelMetadata);
 
   return {
     status: "ok",
@@ -97,6 +103,8 @@ export async function processFile(
     inferenceMs,
     sourceBytes: fileInfo.size,
     inputTokensEstimate: Math.ceil(content.length / 4),
+    model: modelMetadata?.model,
+    provider: modelMetadata?.provider,
   };
 }
 
