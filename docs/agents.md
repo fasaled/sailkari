@@ -86,6 +86,7 @@ src/index.tsx (CLI entry router)
 
 ## Hard constraints (Do not)
 
+- **Do not** commit or push changes unless explicitly requested by the user.
 - **Do not** spawn child processes for `llama-server`. Use `node-llama-cpp`.
 - **Do not** use OS extended attributes (`xattr`). Use `ClassificationStore`.
 - **Do not** run model loading or token generation on the main UI thread.
