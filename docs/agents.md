@@ -37,6 +37,7 @@ src/index.tsx (CLI entry router)
                       └── (Worker Thread) → src/operation-worker.ts
                                               └── src/application.ts (SailkariApplication core)
                                                     ├── src/llm-engine.ts (node-llama-cpp & cloud drivers)
+                                                    ├── src/kev-local-driver.ts (Local Kev System One decision model)
                                                     ├── src/jev-driver.ts (TypeSafe Jev System One)
                                                     ├── src/api-keys.ts (credential resolution & catalog)
                                                     ├── src/classifier.ts (chunking + voting)
@@ -60,6 +61,7 @@ src/index.tsx (CLI entry router)
 | MCP Server | `src/mcp.ts` | Tools (`load_model`, `classify_documents`, etc.), prompt template, contract resource |
 | Application Core | `src/application.ts` | High-level operations (`loadModel`, `evaluate`, `listClassifications`) |
 | LLM Driver | `src/llm-engine.ts` | `node-llama-cpp` adapter, context lifecycle, context-reuse scopes |
+| Kev Local Driver | `src/kev-local-driver.ts` | Local Kev System One decision model (GGUF embeddings + pointer head) |
 | Jev Cloud Driver | `src/jev-driver.ts` | TypeSafe Jev System One decision model integration via native `fetch` |
 | OpenAI Cloud Driver | `src/openai-driver.ts` | OpenAI-compatible (/v1/chat/completions) cloud model integration |
 | API Keys, Providers & Catalog | `src/api-keys.ts` | Dynamic provider & credential resolution (env & config), key masking, and cloud models catalog |

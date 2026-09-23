@@ -7,6 +7,7 @@ import {
   type LlamaContext,
   type LlamaContextSequence,
   type LlamaModel,
+  type Token,
 } from "node-llama-cpp";
 import type { ClassificationResult, Label } from "./types.js";
 import type { EngineContext, EngineDriver, EngineModel, GenerationOptions, NativeLogCallback } from "./llm-engine.js";
@@ -262,7 +263,7 @@ export class KevLocalContext implements EngineContext {
 
     // Evaluate state prefix
     signal?.throwIfAborted();
-    await this.sequence.evaluateWithoutGeneratingNewTokens(stateTokens);
+    await this.sequence.evaluateWithoutGeneratingNewTokens(stateTokens as unknown as Token[]);
 
     // Evaluate options in chunks to capture each </opt> hidden state
     const optHiddens: number[][] = [];
@@ -273,7 +274,7 @@ export class KevLocalContext implements EngineContext {
       signal?.throwIfAborted();
       const targetEnd = optEnds[i]!;
       const chunk = branchTokens.slice(currentOffset, targetEnd + 1);
-      await this.sequence.evaluateWithoutGeneratingNewTokens(chunk);
+      await this.sequence.evaluateWithoutGeneratingNewTokens(chunk as unknown as Token[]);
       currentOffset = targetEnd + 1;
 
       const emb = Array.from(addonCtx.getEmbedding(chunk.length));
@@ -283,7 +284,7 @@ export class KevLocalContext implements EngineContext {
     // Evaluate remainder up to <decide> token
     signal?.throwIfAborted();
     const remainder = branchTokens.slice(currentOffset, decideIndex + 1);
-    await this.sequence.evaluateWithoutGeneratingNewTokens(remainder);
+    await this.sequence.evaluateWithoutGeneratingNewTokens(remainder as unknown as Token[]);
     const decideHidden = Array.from(addonCtx.getEmbedding(remainder.length));
 
     // Compute pointer head probabilities

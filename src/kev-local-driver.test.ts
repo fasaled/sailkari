@@ -45,8 +45,8 @@ describe("kev-local-driver", () => {
 
     const probs = head.computeProbabilities(decideHidden, [opt1Hidden, opt2Hidden]);
     expect(probs.length).toBe(2);
-    expect(probs[0]).toBeGreaterThan(probs[1]);
-    expect(probs[0] + probs[1]).toBeCloseTo(1.0, 5);
+    expect(probs[0]!).toBeGreaterThan(probs[1]!);
+    expect(probs[0]! + probs[1]!).toBeCloseTo(1.0, 5);
   });
 
   it("loads and classifies with local Kev bundle in SailkariApplication", async () => {

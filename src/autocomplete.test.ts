@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { completeInput } from "./autocomplete.js";
+import { applyCompletion, completeInput, getVisibleSuggestionsWindow } from "./autocomplete.js";
 
 describe("completeInput", () => {
   const originalDirectory = process.cwd();
@@ -63,5 +63,42 @@ describe("completeInput", () => {
     expect(completeInput("provider get typ", config)).toEqual(["typesafe"]);
     expect(completeInput("model typ", config)).toEqual(["typesafe:jev", "typesafe:jev-latest", "typesafe:"]);
     expect(completeInput("model ope", config)).toEqual(["openai:gpt-4o-mini", "openai:"]);
+  });
+
+  describe("getVisibleSuggestionsWindow", () => {
+    const list = ["apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew"];
+
+    it("returns all items when they fit completely in maxWidth", () => {
+      const window = getVisibleSuggestionsWindow(list, 0, 200);
+      expect(window.items.length).toBe(list.length);
+      expect(window.hasPrevious).toBe(false);
+      expect(window.hasNext).toBe(false);
+      expect(window.items[0]?.isSelected).toBe(true);
+    });
+
+    it("presents initial items when selection is near the start", () => {
+      // E.g. width fits about 3 items: "apple  banana  cherry »" (around 24 chars)
+      const window = getVisibleSuggestionsWindow(list, 1, 24);
+      expect(window.hasPrevious).toBe(false);
+      expect(window.hasNext).toBe(true);
+      expect(window.items.some((it) => it.text === "banana" && it.isSelected)).toBe(true);
+    });
+
+    it("slides the window when selection moves past midpoint", () => {
+      // With selection at index 4 ("elderberry")
+      const window = getVisibleSuggestionsWindow(list, 4, 30);
+      expect(window.hasPrevious).toBe(true);
+      expect(window.items.some((it) => it.text === "elderberry" && it.isSelected)).toBe(true);
+      // Items before index 4 should be visible, as well as items after or next indicator
+      expect(window.startIndex).toBeGreaterThan(0);
+    });
+
+    it("slides to the end when selection reaches the end", () => {
+      const window = getVisibleSuggestionsWindow(list, list.length - 1, 30);
+      expect(window.hasPrevious).toBe(true);
+      expect(window.hasNext).toBe(false);
+      expect(window.items.at(-1)?.text).toBe("honeydew");
+      expect(window.items.at(-1)?.isSelected).toBe(true);
+    });
   });
 });

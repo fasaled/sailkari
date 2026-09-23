@@ -166,7 +166,7 @@ classify examples/documents examples/labels.yaml --concurrency 6
 Enter these commands in the lower input panel:
 
 ```text
-model <path.gguf|name>             Load GGUF or cloud model (e.g. jev)
+model <path.gguf|dir|name>         Load GGUF, local Kev bundle, or cloud model (e.g. jev)
 prompt <path|default>              Configure the system prompt
 classify <folder> <labels.yaml>   Classify a folder
 classify <folder> <labels.yaml> --force
@@ -196,7 +196,7 @@ quit                                Exit Sailkari
 
 Sailkari supports hybrid benchmarking comparing local GGUF models against any cloud provider and model without hardcoded restrictions:
 
-1. **System One Decision Models:** Such as **TypeSafe Jev** or custom Decision Model gateways running the Jev protocol, returning structured choices and probabilities without text generation.
+1. **System One Decision Models:** Such as **TypeSafe Jev** (cloud) or open-weight **Kev** checkpoints running locally (e.g. `kev-0.8b-gguf`), returning structured choices and calibrated probabilities through pointer heads without text generation.
 2. **OpenAI-Compatible LLMs:** Any custom proxy, gateway, or provider adhering to the chat completions API (e.g. OpenAI, Groq, OpenRouter, vLLM, Ollama, OpenCode Zen).
 
 Any model can be referenced using the `<provider>:<model>` syntax (e.g., `zen:jev`, `openai:gpt-4o-mini`, `openrouter:anthropic/claude-3.5-sonnet`).

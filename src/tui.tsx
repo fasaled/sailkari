@@ -5,7 +5,7 @@ import { Worker } from "node:worker_threads";
 import { DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
 import { loadConfig, saveConfig, type SailkariConfig } from "./config.js";
 import { HELP_TEXT, parseCommand, type Command } from "./command-parser.js";
-import { applyCompletion, completeInput } from "./autocomplete.js";
+import { applyCompletion, completeInput, getVisibleSuggestionsWindow } from "./autocomplete.js";
 import { CommandQueue, type QueuedCommand, type RunnableCommand } from "./command-queue.js";
 import { CommandHistory } from "./command-history.js";
 import {
@@ -33,7 +33,7 @@ const PANEL_GAP = 1;
 
 export function App(): React.ReactElement {
   const { exit } = useApp();
-  const { rows } = useWindowSize();
+  const { rows, columns } = useWindowSize();
   const [input, setInput] = useState("");
   const [events, setEvents] = useState<EventLine[]>([
     { id: 0, text: "Ready. Type `help` to see the available commands.", tone: "muted" },
@@ -52,6 +52,9 @@ export function App(): React.ReactElement {
   const activeCommandRef = useRef<QueuedCommand | null>(null);
   const commandHistoryRef = useRef(new CommandHistory());
   const nextEventIdRef = useRef(1);
+
+  const availableCols = Math.max(20, (columns || process.stdout.columns || 80) - 4);
+  const visibleSuggestions = getVisibleSuggestionsWindow(suggestions, suggestionIndex, availableCols);
 
   const activityHeight = Math.max(1, rows - COMMAND_PANEL_HEIGHT - PANEL_GAP);
   const activityLines = Math.max(1, activityHeight - 4);
@@ -382,21 +385,24 @@ export function App(): React.ReactElement {
           <Text dimColor>{busy ? "working...  cancel stop" : "Enter run  Tab complete  Up/Down history"}</Text>
         </Box>
         <Box>
-          {suggestions.length > 0 ? (
-            suggestions.map((suggestion, index) => {
-              const isSelected = index === suggestionIndex;
-              return (
-                <Text
-                  key={suggestion}
-                  color={isSelected ? "cyan" : "gray"}
-                  bold={isSelected}
-                  wrap="truncate-end"
-                >
-                  {suggestion}
-                  {index < suggestions.length - 1 ? "  " : ""}
-                </Text>
-              );
-            })
+          {visibleSuggestions.items.length > 0 ? (
+            <>
+              {visibleSuggestions.hasPrevious ? <Text color="gray">... </Text> : null}
+              {visibleSuggestions.items.map((item, index) => {
+                return (
+                  <Text
+                    key={`${item.text}-${item.originalIndex}`}
+                    color={item.isSelected ? "cyan" : "gray"}
+                    bold={item.isSelected}
+                    wrap="truncate-end"
+                  >
+                    {item.text}
+                    {index < visibleSuggestions.items.length - 1 ? "  " : ""}
+                  </Text>
+                );
+              })}
+              {visibleSuggestions.hasNext ? <Text color="gray"> ...</Text> : null}
+            </>
           ) : (
             <Text color="gray"> </Text>
           )}

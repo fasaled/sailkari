@@ -61,8 +61,9 @@ Sailkari exposes **one application core** through **two presentation modes** fro
     │      (src/llm-engine.ts)         │  │     (src/classifier.ts)    │
     ├──────────────────────────────────┤  ├────────────────────────────┤
     │  - NodeLlamaDriver (node-llama)  │  │  - Chunking & Token Budget │
-    │  - JevCloudDriver (TypeSafe Jev) │  │  - Majority Voting         │
-    │  - OpenAICompatibleDriver        │  │  - Output Parser           │
+    │  - KevLocalDriver (local head)   │  │  - Majority Voting         │
+    │  - JevCloudDriver (TypeSafe Jev) │  │  - Output Parser           │
+    │  - OpenAICompatibleDriver        │  │                            │
     │  - ChatSession / Direct Decision │  │                            │
     └──────────────────────────────────┘  └─────────────┬──────────────┘
                                                         │
@@ -89,15 +90,18 @@ Sailkari exposes **one application core** through **two presentation modes** fro
   - Worker → Main: `{ type: "event" | "progress" | "native-log" | "model-loaded" | "prompt-loaded" | "done" | "cancelled" | "error", id, ... }`
 - **Cancellation:** The worker associates every running task with an `AbortController`. The user typing `cancel` triggers `controller.abort()`, throwing an `AbortError` that halts inference and chunk iteration immediately.
 
-### 3.2 Command Queue and History
+### 3.2 Command Queue, History, and Autocomplete
 - **Queue (`src/command-queue.ts`):** Maintains a FIFO queue of commands entered while an operation is active. Supports inspection (`queue`), removal (`queue remove <pos>`), reordering (`queue move <from> <to>`), and clearing (`queue clear`).
 - **History (`src/command-history.ts`):** Navigable via Up/Down arrow keys. Persisted across sessions in `~/.config/sailkari/config.json`.
+- **Sliding Window Autocomplete (`src/autocomplete.ts` & `src/tui.tsx`):** Tab completion displays matching candidates in a horizontal sliding window adapted to terminal width (`getVisibleSuggestionsWindow`). When options overflow the visible viewport, the window automatically scrolls as the user cycles through candidates, keeping the highlighted option around the visual center and displaying ellipsis indicators (`... ` / ` ...`) to show hidden items.
 
 ---
 
 ## 4. Inference Engine and Context Lifecycle
 
-Sailkari uses `node-llama-cpp` (v3) to execute local GGUF models directly in-process via Metal, CUDA, or CPU. For cloud-based evaluation, it utilizes specialized drivers (e.g. `JevCloudDriver` for TypeSafe Jev System One decision models) over HTTPS with native `fetch`.
+Sailkari uses `node-llama-cpp` (v3) to execute local GGUF models directly in-process via Metal, CUDA, or CPU.
+For local System One decision models, it provides `KevLocalDriver` (`src/kev-local-driver.ts`), combining GGUF hidden-state embeddings with a calibrated pointer head (`head.json`).
+For cloud-based evaluation, it utilizes specialized drivers (e.g. `JevCloudDriver` for TypeSafe Jev System One decision models) over HTTPS with native `fetch`.
 
 ### 4.1 Token Budgets and Context Limits
 - `MAX_CONTEXT`: 32,768 tokens.

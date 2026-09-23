@@ -270,3 +270,30 @@ The architectural trajectory follows a coherent progression: transitioning from 
 4. **Telemetry Feedback:** Surface the applied target model, provider, and effective concurrency in both the benchmark start event and the final evaluation summary table.
 
 **Consequences:** Substantially faster cloud evaluations (reducing total batch latency from over a minute to a few seconds) while maintaining determinism, clean memory boundaries, and full hardware safety for local models.
+
+---
+
+## D22 — Local Kev System One Decision Model Driver Support
+
+**Context:** TypeSafe's Jev architecture and its open-weight equivalent Kev (e.g. `kev-0.8b-gguf`) operate as single-pass decision models rather than text-generative LLMs. While Sailkari supported Jev via remote HTTPS API calls (`JevCloudDriver`), running offline local Kev checkpoints was not possible with standard generative prompts because Kev requires evaluating structural control tokens (`<|fim_prefix|>`, `<|fim_middle|>`, `<|box_start|>`, `<|box_end|>`, `<|fim_suffix|>`), extracting hidden-state embeddings from the `</opt>` and `<decide>` tokens, and scoring them with a calibrated linear pointer head (`head.json`).
+
+**Decision:**
+1. **Automatic Bundle Detection (`detectKevBundle`):** Detect Kev model checkpoints transparently from either a directory (containing `manifest.json` / `head.json` / `.gguf`) or directly pointing to a `.gguf` file adjacent to `head.json`.
+2. **KevLocalDriver (`src/kev-local-driver.ts`):** Implements `EngineDriver` and `EngineContext` using `node-llama-cpp` with embedding context enabled (`_embeddings: true`). Evaluates token chunks to capture intermediate `</opt>` hidden activations and the final `<decide>` token.
+3. **Calibrated Pointer Head (`KevHead`):** Loads `q_weight`, `k_weight`, biases, and calibrated temperature from `head.json`. Computes scaled dot-product attention queries and keys to calculate softmax probabilities across classification categories.
+4. **Direct Decision Routing (`classifyDirect`):** Plugs directly into `SailkariApplication`'s classification pipeline without generative prompt formatting or regex JSON extraction.
+
+**Consequences:** Complete offline support for local System One decision models with calibrated probabilities, fast single-pass evaluation, and parity with hosted Jev behavior.
+
+---
+
+## D23 — Sliding Window Autocomplete with Center-Biased Scrolling
+
+**Context:** When users input commands in the TUI (such as `model <path>` or `classify <folder> <labels>`), autocomplete can generate numerous and lengthy candidates (e.g. multiple long GGUF filenames). In fixed-height terminal panels, rendering all items causes line wrapping or truncates the command input box.
+
+**Decision:**
+1. **Viewport Measurement:** Measure available columns dynamically (`getVisibleSuggestionsWindow`) based on terminal width.
+2. **Center-Biased Window:** As the user tabs through candidates, keep the selection visible. Once the selection index passes the midpoint of visible items, scroll the window to keep the active candidate near the center.
+3. **Ellipsis Overflow Indicators:** Display subtle ellipsis markers (`... ` and ` ...`) on the edges when suggestions extend beyond the current visible frame.
+
+**Consequences:** Predictable, clean TUI layout with zero overflow glitches and smooth horizontal navigation across large candidate lists.
