@@ -9,6 +9,7 @@ import type { ProcessingResult } from "./types.js";
 import { getCloudModelDefinition, isCloudModel, listCloudModels, resolveApiKey } from "./api-keys.js";
 import { loadConfig } from "./config.js";
 import { JevCloudDriver } from "./jev-driver.js";
+import { KevLocalDriver, detectKevBundle } from "./kev-local-driver.js";
 import { OpenAICompatibleDriver } from "./openai-driver.js";
 
 export interface EvaluationOptions {
@@ -73,6 +74,15 @@ export class SailkariApplication {
     }
 
     const absolutePath = resolve(modelPath);
+    const kevBundle = await detectKevBundle(absolutePath);
+    if (kevBundle) {
+      const driver = new KevLocalDriver(kevBundle, this.nativeLogger ?? (() => {}));
+      this.engine = createLLMEngine(this.nativeLogger ?? (() => {}), driver);
+      await this.engine.loadModel(kevBundle.modelPath);
+      this.modelPath = absolutePath;
+      return absolutePath;
+    }
+
     this.engine = createLLMEngine(this.nativeLogger ?? (() => {}));
     await this.engine.loadModel(absolutePath);
     this.modelPath = absolutePath;
