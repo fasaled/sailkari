@@ -16,8 +16,8 @@ describe("evaluation metrics", () => {
       "--------------------------------------",
       "Target         jev              provider: zen | model: jev | concurrency: 4",
       "Files          3                1 labelled | 1 no match | 1 skipped",
-      "Timing         4.00s            setup 500ms | inference 3.00s | mean 1.50s/file",
-      "Input          ~500 tok/s       3.1 KB | ~1500 tokens | 3 calls | 3 chunks",
+      "Timing         4.00s            elapsed (setup 500ms) | latency avg 1.50s/file | compute sum 3.00s",
+      "Input          ~429 tok/s       3.1 KB | ~1,500 tokens | 3 calls | 3 chunks",
     ]);
   });
 

@@ -132,9 +132,24 @@ export function summarizeEvaluation(
   return summary;
 }
 
+export function formatTokens(count: number): string {
+  if (count >= 1_000_000) {
+    return `${(count / 1_000_000).toFixed(1)}M`;
+  }
+  if (count >= 10_000) {
+    return `${(count / 1_000).toFixed(1)}k`;
+  }
+  return count.toLocaleString("en-US");
+}
+
 export function formatEvaluationSummaryTable(summary: EvaluationSummary): string[] {
-  const average = summary.evaluated ? summary.inferenceMs / summary.evaluated : 0;
-  const inputRate = summary.inferenceMs ? Math.round(summary.inputTokensEstimate / (summary.inferenceMs / 1_000)) : 0;
+  const averageLatency = summary.evaluated ? summary.inferenceMs / summary.evaluated : 0;
+  const isConcurrent = (summary.concurrency ?? 1) > 1;
+
+  // Real effective throughput based on wall-clock duration of the benchmark run
+  const wallSeconds = Math.max(0.001, (summary.totalDurationMs - summary.preparationMs) / 1_000);
+  const effectiveRate = Math.round(summary.inputTokensEstimate / wallSeconds);
+
   const header = [fit("METRIC", 14), fit("VALUE", 16), "DETAIL"].join(" ");
   const rows: string[] = [
     "Benchmark summary",
@@ -152,10 +167,14 @@ export function formatEvaluationSummaryTable(summary: EvaluationSummary): string
     rows.push([fit("Concurrency", 14), fit(String(summary.concurrency), 16), `${summary.concurrency} parallel worker${summary.concurrency === 1 ? "" : "s"}`].join(" "));
   }
 
+  const timingDetail = isConcurrent
+    ? `elapsed (setup ${formatDuration(summary.preparationMs)}) | latency avg ${formatDuration(averageLatency)}/file | compute sum ${formatDuration(summary.inferenceMs)}`
+    : `setup ${formatDuration(summary.preparationMs)} | inference ${formatDuration(summary.inferenceMs)} | mean ${formatDuration(averageLatency)}/file`;
+
   rows.push(
     [fit("Files", 14), fit(String(summary.files), 16), `${summary.tagged} labelled | ${summary.noLabel} no match | ${summary.skipped} skipped`].join(" "),
-    [fit("Timing", 14), fit(formatDuration(summary.totalDurationMs), 16), `setup ${formatDuration(summary.preparationMs)} | inference ${formatDuration(summary.inferenceMs)} | mean ${formatDuration(average)}/file`].join(" "),
-    [fit("Input", 14), fit(`~${inputRate} tok/s`, 16), `${formatBytes(summary.sourceBytes)} | ~${summary.inputTokensEstimate} tokens | ${summary.calls} calls | ${summary.chunks} chunks`].join(" ")
+    [fit("Timing", 14), fit(formatDuration(summary.totalDurationMs), 16), timingDetail].join(" "),
+    [fit("Input", 14), fit(`~${formatTokens(effectiveRate)} tok/s`, 16), `${formatBytes(summary.sourceBytes)} | ~${formatTokens(summary.inputTokensEstimate)} tokens | ${summary.calls} calls | ${summary.chunks} chunks`].join(" ")
   );
 
   return rows;
