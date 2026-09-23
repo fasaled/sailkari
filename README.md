@@ -142,9 +142,10 @@ For every evaluated document, Sailkari shows the predicted label, total duration
 duration, source size, estimated input tokens, model calls, and estimated input throughput.
 The final summary groups results into:
 
+- target: model identifier, provider, and applied concurrency;
 - file outcomes: labelled, no match, and cached;
-- timing: setup, total inference, and mean inference time per evaluated file;
-- workload: bytes, estimated input tokens, calls, chunks, and input tokens per second.
+- timing: wall-clock elapsed time (with setup), per-file average latency, and aggregate compute time;
+- workload: bytes, estimated input tokens, calls, chunks, and effective input tokens per second.
 
 This keeps quality signals and performance signals together while comparing models.
 

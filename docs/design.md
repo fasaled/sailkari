@@ -248,6 +248,7 @@ For every evaluated document, Sailkari computes:
 - Throughput in input tokens per second
 
 Aggregate evaluation summaries group results into:
+- Target: Evaluated model name, provider, and effective concurrency level
 - Outcomes: Labelled, No Match (`NONE`), and Cached
-- Timing: Preparation time, total inference time, mean inference time per file
-- Workload: Total bytes, total estimated tokens, and aggregate input tokens/sec
+- Timing: Wall-clock elapsed duration (with setup), per-file average latency, and cumulative compute time
+- Workload: Total bytes, total estimated tokens (formatted consistently), calls, chunks, and effective throughput (tokens/sec)
