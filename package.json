@@ -1,6 +1,6 @@
 {
   "name": "@fasaled/sailkari",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "license": "MIT",
   "description": "Local-first GGUF document classifier with a TUI and MCP server for benchmarking classification workflows on-device",
