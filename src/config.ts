@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { defaultSecureStore, SecureCredentialStore } from "./secure-store.js";
 
 export interface ProviderConfig {
   apiKey?: string;
@@ -22,10 +23,13 @@ export function getConfigPath(): string {
   return join(homedir(), ".config", "sailkari", "config.json");
 }
 
-export async function loadConfig(path = getConfigPath()): Promise<SailkariConfig> {
+export async function loadConfig(
+  path = getConfigPath(),
+  secureStore: SecureCredentialStore = defaultSecureStore
+): Promise<SailkariConfig> {
   try {
     const parsed = JSON.parse(await readFile(path, "utf8")) as SailkariConfig;
-    return {
+    const config: SailkariConfig = {
       ...(typeof parsed.modelPath === "string" ? { modelPath: parsed.modelPath } : {}),
       ...(typeof parsed.systemPromptPath === "string" ? { systemPromptPath: parsed.systemPromptPath } : {}),
       ...(Array.isArray(parsed.commandHistory) ? { commandHistory: parsed.commandHistory.filter((entry): entry is string => typeof entry === "string") } : {}),
@@ -54,6 +58,24 @@ export async function loadConfig(path = getConfigPath()): Promise<SailkariConfig
         ),
       } : {}),
     };
+
+    // Auto-migrate legacy keys into secure store in background if present
+    if (config.providers) {
+      for (const [provider, p] of Object.entries(config.providers)) {
+        if (p.apiKey?.trim()) {
+          void secureStore.set(provider, p.apiKey.trim()).catch(() => {});
+        }
+      }
+    }
+    if (config.apiKeys) {
+      for (const [provider, key] of Object.entries(config.apiKeys)) {
+        if (key?.trim()) {
+          void secureStore.set(provider, key.trim()).catch(() => {});
+        }
+      }
+    }
+
+    return config;
   } catch {
     return {};
   }
@@ -61,12 +83,43 @@ export async function loadConfig(path = getConfigPath()): Promise<SailkariConfig
 
 let savePromiseChain: Promise<void> = Promise.resolve();
 
-export async function saveConfig(config: SailkariConfig, path = getConfigPath()): Promise<void> {
+export async function saveConfig(
+  config: SailkariConfig,
+  path = getConfigPath(),
+  secureStore: SecureCredentialStore = defaultSecureStore
+): Promise<void> {
+  // 1. Sync credentials to secure storage if present
+  if (config.providers) {
+    for (const [provider, p] of Object.entries(config.providers)) {
+      if (p.apiKey?.trim()) {
+        await secureStore.set(provider, p.apiKey.trim()).catch(() => {});
+      }
+    }
+  }
+  if (config.apiKeys) {
+    for (const [provider, key] of Object.entries(config.apiKeys)) {
+      if (key?.trim()) {
+        await secureStore.set(provider, key.trim()).catch(() => {});
+      }
+    }
+  }
+
+  // 2. Persist config file with 0600 permissions
   savePromiseChain = savePromiseChain.then(async () => {
-    await mkdir(dirname(path), { recursive: true });
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await writeFile(temporaryPath, JSON.stringify(config, null, 2) + "\n", "utf8");
+    await writeFile(temporaryPath, JSON.stringify(config, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+    try {
+      await chmod(temporaryPath, 0o600);
+    } catch {
+      // Ignored for environments without chmod support
+    }
     await rename(temporaryPath, path);
+    try {
+      await chmod(path, 0o600);
+    } catch {
+      // Ignored
+    }
   }).catch((err) => {
     // Avoid breaking the chain on failure
     console.error("Failed to save config:", err);

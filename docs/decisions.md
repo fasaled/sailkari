@@ -297,3 +297,23 @@ The architectural trajectory follows a coherent progression: transitioning from 
 3. **Ellipsis Overflow Indicators:** Display subtle ellipsis markers (`... ` and ` ...`) on the edges when suggestions extend beyond the current visible frame.
 
 **Consequences:** Predictable, clean TUI layout with zero overflow glitches and smooth horizontal navigation across large candidate lists.
+
+---
+
+## D24 — Platform-Native Secure Credential Storage with Strict 0600 File Fallback
+
+**Context:** API keys and provider tokens were initially persisted in plaintext within `~/.config/sailkari/config.json`. Storing credentials in unencrypted config files creates privilege exposure risks across local processes and multi-user environments. Furthermore, relying on C++ native addons like `keytar` frequently breaks `npm install` across environments lacking C++ build tools, while legacy Windows PowerShell modules (`Microsoft.PowerShell.SecretStore` / `SecretManagement`) are archived, unmaintained, or pending deprecation by Microsoft.
+
+**Decision:**
+1. **Multi-Tier Secure Storage Architecture (`src/secure-store.ts`):**
+   - **macOS:** Native macOS Keychain via `/usr/bin/security` under service name `sailkari`, protected by hardware/Secure Enclave.
+   - **Windows:** Native Windows Data Protection API (DPAPI) via `System.Security.Cryptography.ProtectedData` (`DataProtectionScope.CurrentUser`), writing encrypted payloads to `%LOCALAPPDATA%\sailkari\credentials.dpapi`. This uses standard non-deprecated Windows platform APIs with zero native build dependencies.
+   - **Linux / Headless / Fallback:** Strict POSIX `0600` permission credentials file (`~/.config/sailkari/credentials.json`), ensuring read/write access is restricted exclusively to the owning operating system user.
+2. **Transparent Auto-Migration:** On startup or save, `loadConfig` and `saveConfig` automatically mirror any credentials found in `config.json` into the secure store and enforce `0600` permissions on `config.json`.
+3. **Credential Resolution Priority:** `resolveApiKeyAsync` checks:
+   1. Active environment variable (`<PROVIDER>_API_KEY`).
+   2. Platform secure credential store (Keychain / DPAPI / 0600 file).
+   3. Fallback to `config.json` for full backwards compatibility.
+
+**Consequences:** Enterprise-grade security for API keys and tokens out of the box, zero native compilation issues on installation, and full backwards compatibility with existing user configurations.
+

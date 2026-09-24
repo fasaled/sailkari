@@ -78,6 +78,8 @@ export async function processFile(
     return {
       status: "none",
       filePath,
+      chunks,
+      calls,
       durationMs: performance.now() - startedAt,
       inferenceMs,
       sourceBytes: fileInfo.size,

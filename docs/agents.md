@@ -64,6 +64,7 @@ src/index.tsx (CLI entry router)
 | Kev Local Driver | `src/kev-local-driver.ts` | Local Kev System One decision model (GGUF embeddings + pointer head) |
 | Jev Cloud Driver | `src/jev-driver.ts` | TypeSafe Jev System One decision model integration via native `fetch` |
 | OpenAI Cloud Driver | `src/openai-driver.ts` | OpenAI-compatible (/v1/chat/completions) cloud model integration |
+| Secure Storage | `src/secure-store.ts` | Platform-native credential storage (macOS Keychain, Windows DPAPI, 0600 file) |
 | API Keys, Providers & Catalog | `src/api-keys.ts` | Dynamic provider & credential resolution (env & config), key masking, and cloud models catalog |
 | Classifier Pipeline | `src/classifier.ts` | Chunking large files, majority voting, caching bypass with `--force` |
 | Classification Store | `src/classification-store.ts` | Local `.sailkari/results.json` reader/writer |

@@ -32,7 +32,23 @@ describe("processFile", () => {
     try {
       const result = await processFile(filePath, [{ name: "banking", description: "financial document" }], false, engine, store);
       expect(engine.classify).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject({ status: "ok", labels: ["banking"] });
+      expect(result).toMatchObject({ status: "ok", labels: ["banking"], calls: 1, chunks: 1 });
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+
+  test("includes calls and chunks when result has no matching labels", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "sailkari-classifier-"));
+    const filePath = join(folder, "unmatched.txt");
+    const store = new ClassificationStore(folder);
+    await writeFile(filePath, "Random notes");
+    const engine = { classify: mock(async () => ({ labels: [] })) } as unknown as LLMEngine;
+
+    try {
+      const result = await processFile(filePath, [{ name: "banking", description: "financial document" }], false, engine, store);
+      expect(engine.classify).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ status: "none", calls: 1, chunks: 1 });
     } finally {
       await rm(folder, { recursive: true, force: true });
     }

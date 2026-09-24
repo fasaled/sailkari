@@ -173,17 +173,22 @@ Schema:
 
 Writes are atomic: content is written to a temporary sibling file and committed using `fs.renameSync`.
 
-### 6.2 User Configuration (`src/config.ts`)
+### 6.2 User Configuration and Secure Credentials (`src/config.ts`, `src/secure-store.ts`)
 Global user settings are stored in:
-`~/.config/sailkari/config.json`
+`~/.config/sailkari/config.json` (persisted with strict `0600` permissions).
 
-Contains:
+Sensitive API keys and tokens are managed via the platform-native secure credential store (`src/secure-store.ts`):
+- **macOS:** macOS Keychain (`/usr/bin/security`).
+- **Windows:** Windows DPAPI (`System.Security.Cryptography.ProtectedData`, `DataProtectionScope.CurrentUser`).
+- **Linux & Headless:** `~/.config/sailkari/credentials.json` with strict `0600` permissions.
+
+`config.json` Contains:
 - `modelPath`: path to the last loaded GGUF model or cloud model identifier (`<provider>:<model>`).
 - `systemPromptPath`: path to the active custom prompt file (if any).
 - `commandHistory`: array of previously executed commands.
-- `apiKeys`: legacy dictionary of API keys per provider (`typesafe`, etc.).
+- `apiKeys`: legacy dictionary of API keys per provider (`typesafe`, etc.), auto-migrated to the secure store.
 - `providers`: dynamic dictionary of provider configurations:
-  - `apiKey`: secret token for the provider.
+  - `apiKey`: secret token for the provider (mirrored in secure storage).
   - `endpoint`: custom base URL or endpoint.
   - `driverType`: `"jev"` or `"openai-compatible"`.
   - `models`: string array of models registered for this provider.

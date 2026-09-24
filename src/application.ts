@@ -6,7 +6,7 @@ import { createLLMEngine, type EngineContext, type LLMEngine, type NativeLogCall
 import { DEFAULT_SYSTEM_PROMPT, inspectSystemPrompt, loadSystemPrompt } from "./prompt.js";
 import { summarizeEvaluation } from "./evaluation-metrics.js";
 import type { ProcessingResult } from "./types.js";
-import { getCloudModelDefinition, isCloudModel, listCloudModels, resolveApiKey } from "./api-keys.js";
+import { getCloudModelDefinition, isCloudModel, listCloudModels, resolveApiKey, resolveApiKeyAsync } from "./api-keys.js";
 import { loadConfig } from "./config.js";
 import { JevCloudDriver } from "./jev-driver.js";
 import { KevLocalDriver, detectKevBundle } from "./kev-local-driver.js";
@@ -55,7 +55,7 @@ export class SailkariApplication {
       if (!def) {
         throw new Error(`Unable to resolve cloud model definition for '${modelPath}'.`);
       }
-      const resolved = resolveApiKey(def.provider, config);
+      const resolved = (await resolveApiKeyAsync(def.provider, config)) ?? resolveApiKey(def.provider, config);
       if (!resolved) {
         const envVar = `${def.provider.toUpperCase()}_API_KEY`;
         throw new Error(

@@ -1,11 +1,12 @@
 import type { ProviderConfig, SailkariConfig } from "./config.js";
+import { defaultSecureStore, SecureCredentialStore } from "./secure-store.js";
 
 export type DriverType = "jev" | "openai-compatible";
 
 export interface ResolvedProvider {
   name: string;
   apiKey: string;
-  keySource: "env" | "config";
+  keySource: "env" | "config" | "keychain";
   endpoint: string;
   endpointSource: "env" | "config" | "default";
   driverType: DriverType;
@@ -25,13 +26,13 @@ export interface CloudModelDefinition {
 
 export interface ResolvedApiKey {
   key: string;
-  source: "env" | "config";
+  source: "env" | "config" | "keychain";
 }
 
 export interface ProviderKeyStatus {
   provider: string;
   configured: boolean;
-  source?: "env" | "config";
+  source?: "env" | "config" | "keychain";
   maskedKey?: string;
   rawKey?: string;
   endpoint?: string;
@@ -55,7 +56,10 @@ export function maskApiKey(key: string): string {
   return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
 }
 
-export function resolveApiKey(provider: string, config?: SailkariConfig): ResolvedApiKey | undefined {
+export function resolveApiKey(
+  provider: string,
+  config?: SailkariConfig
+): ResolvedApiKey | undefined {
   const normalized = normalizeProvider(provider);
   const upper = sanitizeEnvName(normalized);
 
@@ -80,6 +84,32 @@ export function resolveApiKey(provider: string, config?: SailkariConfig): Resolv
   }
 
   return undefined;
+}
+
+export async function resolveApiKeyAsync(
+  provider: string,
+  config?: SailkariConfig,
+  secureStore: SecureCredentialStore = defaultSecureStore
+): Promise<ResolvedApiKey | undefined> {
+  const normalized = normalizeProvider(provider);
+  const upper = sanitizeEnvName(normalized);
+
+  // 1. Env var has highest precedence
+  const directKey = process.env[`${upper}_API_KEY`];
+  if (directKey?.trim()) return { key: directKey.trim(), source: "env" };
+
+  // 2. Secure OS keychain / 0600 store
+  try {
+    const secureKey = await secureStore.get(normalized);
+    if (secureKey?.trim()) {
+      return { key: secureKey.trim(), source: "keychain" };
+    }
+  } catch {
+    // Continue to config fallback
+  }
+
+  // 3. Fallback to synchronous config check
+  return resolveApiKey(provider, config);
 }
 
 export function resolveProviderEndpoint(
@@ -198,18 +228,26 @@ export function resolveProvider(
 
 export function isCloudModel(target: string): boolean {
   const trimmed = target.trim();
+  // Windows absolute paths like C:\path\to\model.gguf or D:/path/to/model.gguf
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed)) {
+    return false;
+  }
   const colonIndex = trimmed.indexOf(":");
-  return colonIndex > 0;
+  if (colonIndex <= 0) return false;
+
+  const providerCandidate = trimmed.slice(0, colonIndex);
+  // Providers must be valid identifiers (letters, numbers, hyphens, underscores) with at least 2 chars
+  return /^[a-zA-Z0-9_-]{2,}$/.test(providerCandidate);
 }
 
 export function getCloudModelDefinition(
   target: string,
   config?: SailkariConfig
 ): CloudModelDefinition | undefined {
+  if (!isCloudModel(target)) return undefined;
+
   const trimmed = target.trim();
   const colonIndex = trimmed.indexOf(":");
-  if (colonIndex <= 0) return undefined;
-
   const provider = normalizeProvider(trimmed.slice(0, colonIndex));
   const model = trimmed.slice(colonIndex + 1).trim();
   if (!model) return undefined;
@@ -260,7 +298,7 @@ export function listCloudModels(config?: SailkariConfig): {
   provider: string;
   canonicalModel: string;
   available: boolean;
-  source?: "env" | "config";
+  source?: "env" | "config" | "keychain";
   endpoint: string;
   driverType: DriverType;
   description: string;
@@ -271,7 +309,7 @@ export function listCloudModels(config?: SailkariConfig): {
     provider: string;
     canonicalModel: string;
     available: boolean;
-    source?: "env" | "config";
+    source?: "env" | "config" | "keychain";
     endpoint: string;
     driverType: DriverType;
     description: string;
@@ -381,9 +419,11 @@ export function setApiKeyInConfig(
 
 export function removeProviderFromConfig(
   config: SailkariConfig,
-  provider: string
+  provider: string,
+  secureStore: SecureCredentialStore = defaultSecureStore
 ): { config: SailkariConfig; removed: boolean } {
   const normalized = normalizeProvider(provider);
+  void secureStore.delete(normalized).catch(() => {});
 
   const hasInProviders = Boolean(config.providers && config.providers[normalized]);
   const hasInApiKeys = Boolean(config.apiKeys && config.apiKeys[normalized]);

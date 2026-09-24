@@ -240,9 +240,14 @@ describe("api-keys & providers", () => {
       expect(isCloudModel("zen:jev")).toBe(true);
       expect(isCloudModel("/path/to/model.gguf")).toBe(false);
       expect(isCloudModel("model.gguf")).toBe(false);
+      expect(isCloudModel("C:\\Users\\Francisco\\models\\Ministral-3-3B.gguf")).toBe(false);
+      expect(isCloudModel("c:\\models\\model.gguf")).toBe(false);
+      expect(isCloudModel("D:/models/model.gguf")).toBe(false);
+      expect(isCloudModel("relative/path/model.gguf")).toBe(false);
     });
 
     it("parses dynamic cloud model definition for any provider", () => {
+      expect(getCloudModelDefinition("C:\\Users\\Francisco\\models\\Ministral.gguf")).toBeUndefined();
       const def = getCloudModelDefinition("openai:custom-model");
       expect(def).toBeDefined();
       expect(def!.provider).toBe("openai");
